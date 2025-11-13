@@ -1,0 +1,31 @@
+# requirements.txt - Python Dependencies
+# =======================================
+
+# Core Framework
+chainlit==1.1.402
+
+# Database
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.32
+
+# Environment Variables
+python-dotenv==1.0.0
+openpyxl==3.1.5
+# OpenAI
+openai==1.30.0
+dateparser==1.2.0
+
+# Date/Time Utilities
+python-dateutil==2.8.2
+
+# Optional: Enhanced Features
+asyncpg==0.29.0            # For async database operations
+pandas==2.1.4             # For data analysis
+plotly==5.18.0            # For charts and visualizations
+fastapi
+uvicorn
+jinja2
+aiofiles
+asyncio
+
+pydantic==1.10.15
