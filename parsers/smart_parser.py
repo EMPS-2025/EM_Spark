@@ -47,17 +47,17 @@ class SmartParser:
         specs = self._simple_parse(normalized)
         if specs:
             print("✓ Parsed using simple patterns")
-            return specs
-        
+            return self._apply_time_groups(specs, normalized)
+
         # Tier 2: Try rule-based parsing (fast, free)
         specs = self._rule_based_parse(normalized)
         if specs:
             print("✓ Parsed using rule-based logic")
             return specs
-        
+
         # Tier 3: Use OpenAI (slower, costs money, but handles anything)
         if self.openai_client:
-            specs = self._openai_parse(user_query)
+            specs = self._openai_parse(user_query, normalized)
             if specs:
                 print("✓ Parsed using OpenAI GPT")
                 return specs
@@ -170,7 +170,7 @@ class SmartParser:
     # Tier 3: OpenAI-Powered Parsing
     # ═══════════════════════════════════════════════════════════
     
-    def _openai_parse(self, user_query: str) -> Optional[List[QuerySpec]]:
+    def _openai_parse(self, user_query: str, normalized: str) -> Optional[List[QuerySpec]]:
         """Use OpenAI to understand complex queries."""
         
         if not self.openai_client:
@@ -235,7 +235,7 @@ Return ONLY valid JSON. No explanations."""
                     print(f"Failed to parse OpenAI response item: {e}")
                     continue
             
-            return specs if specs else None
+            return self._apply_time_groups(specs, normalized) if specs else None
             
         except Exception as e:
             print(f"OpenAI parsing error: {e}")
@@ -287,6 +287,44 @@ Return ONLY valid JSON. No explanations."""
                 unique.append(spec)
         
         return unique
+
+    def _apply_time_groups(self, specs: List[QuerySpec], text: str) -> List[QuerySpec]:
+        """Overlay explicit time groups on parsed specs (useful for OpenAI path)."""
+
+        groups = self.time_parser.parse_time_groups(text)
+        if not groups:
+            return specs
+
+        default_hours = tuple(range(1, 25))
+        default_slots = tuple(range(1, 97))
+        adjusted: List[QuerySpec] = []
+
+        for spec in specs:
+            hours_tuple = tuple(spec.hours or [])
+            slots_tuple = tuple(spec.slots or [])
+            has_custom_hours = bool(hours_tuple and hours_tuple != default_hours)
+            has_custom_slots = bool(slots_tuple and slots_tuple != default_slots)
+
+            if has_custom_hours or has_custom_slots:
+                adjusted.append(spec)
+                continue
+
+            for group in groups:
+                adjusted.append(
+                    QuerySpec(
+                        market=spec.market,
+                        start_date=spec.start_date,
+                        end_date=spec.end_date,
+                        granularity=group["granularity"],
+                        hours=group.get("hours"),
+                        slots=group.get("slots"),
+                        stat=spec.stat,
+                        area=spec.area,
+                        auto_added=spec.auto_added,
+                    )
+                )
+
+        return self._deduplicate_specs(adjusted) if adjusted else specs
 
 
 # ═══════════════════════════════════════════════════════════

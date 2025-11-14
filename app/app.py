@@ -21,12 +21,14 @@ if PROJECT_ROOT not in sys.path:
 import asyncio
 import traceback
 import uuid
-from typing import List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import date, datetime
 import calendar
 import re
 
 import chainlit as cl
+import plotly.graph_objects as go
 
 # Import our new modules
 from presenters.response_builder import ResponseBuilder
@@ -57,6 +59,17 @@ date_parser = DateParser()
 time_parser = TimeParser()
 response_builder = ResponseBuilder()
 smart_parser = SmartParser(config)  # NEW: Smart parser with OpenAI
+
+
+@dataclass
+class MarketDataBundle:
+    """Container for formatted market data and analytics."""
+
+    summary: Dict[str, Any]
+    rows: List[Dict]
+    granularity: str
+    kpi: str
+    table: str
 
 
 DISCLAIMER_FOOTER = """
@@ -141,33 +154,60 @@ async def handle_message(msg: cl.Message):
                 granularity=specs[0].granularity,
                 hours=specs[0].hours,
                 slots=specs[0].slots,
-                stat=specs[0].stat
+                stat=specs[0].stat,
+                auto_added=True,
             )
             specs.append(gdam_spec)
             await update_progress(progress, "📊 Adding GDAM comparison...")
-        
+
         # Fetch data
         await update_progress(progress, "📥 Fetching market data...")
-        sections = []
-        
+        sections: List[str] = []
+        market_summaries: Dict[str, Dict[str, Any]] = {}
+
         for spec in specs:
-            section = await build_response_section(spec, user_query)
-            sections.append(section)
-        
-        # Add comparison if we have DAM and GDAM
-        if len(specs) == 2 and {specs[0].market, specs[1].market} == {"DAM", "GDAM"}:
-            comparison = build_comparison_section(specs, sections)
+            include_derivatives = not getattr(spec, "auto_added", False)
+            section, summary = await build_response_section(
+                spec,
+                user_query,
+                include_derivatives=include_derivatives,
+            )
+            market_summaries[spec.market] = summary
+            if not getattr(spec, "auto_added", False):
+                sections.append(section)
+
+        chart_element = None
+        if {"DAM", "GDAM"}.issubset(market_summaries.keys()):
+            base_spec = next((s for s in specs if not s.auto_added), specs[0])
+            dam_spec = next((s for s in specs if s.market == "DAM"), None)
+            gdam_spec = next((s for s in specs if s.market == "GDAM"), None)
+
+            comparison, chart_fig = build_comparison_section(
+                base_spec,
+                dam_spec,
+                gdam_spec,
+                market_summaries.get("DAM"),
+                market_summaries.get("GDAM"),
+            )
+
             if comparison:
-                sections.insert(1, comparison)
-        
+                insert_at = 1 if sections else 0
+                sections.insert(insert_at, comparison)
+
+            if chart_fig:
+                chart_element = cl.Plotly(name="Market Trend", figure=chart_fig)
+
         # Send response
         await hide_progress(progress)
         final_response = "\n\n---\n\n".join(sections)
         final_response = highlight_gdam(final_response)
-        
+
+        elements = [chart_element] if chart_element else None
+
         await cl.Message(
             author=config.ASSISTANT_NAME,
-            content=final_response
+            content=final_response,
+            elements=elements,
         ).send()
         
     except Exception as e:
@@ -275,24 +315,32 @@ def deduplicate_specs(specs: List[QuerySpec]) -> List[QuerySpec]:
 # DATA FETCHING & RESPONSE BUILDING
 # ═══════════════════════════════════════════════════════════════
 
-async def build_response_section(spec: QuerySpec, original_query: str) -> str:
+async def build_response_section(
+    spec: QuerySpec,
+    original_query: str,
+    include_derivatives: bool = True,
+) -> Tuple[str, Dict[str, Any]]:
     """Build a complete response section for one QuerySpec."""
-    
+
     # Build header with selection card
     if spec.granularity == "hour":
         time_label, idx_label, count = label_hour_ranges(spec.hours)
     else:
         time_label, idx_label, count = label_slot_ranges(spec.slots)
-    
+
     header = build_header(spec, time_label, count)
-    
+
     # Fetch data
-    kpi, table = await fetch_and_format_data(spec)
-    
+    bundle = await fetch_and_format_data(spec)
+
     # Fetch derivatives if applicable
-    deriv_section = await fetch_derivatives(spec, original_query)
-    
-    return f"{header}\n\n{kpi}{table}{deriv_section}"
+    deriv_section = ""
+    if include_derivatives:
+        deriv_section = await fetch_derivatives(spec, original_query)
+
+    section = f"{header}\n\n{bundle.kpi}{bundle.table}{deriv_section}"
+
+    return section, bundle.summary
 
 
 def build_header(spec: QuerySpec, time_label: str, hours_count: float) -> str:
@@ -311,91 +359,390 @@ def build_header(spec: QuerySpec, time_label: str, hours_count: float) -> str:
         f"| **Duration** | {time_label} ({hours_str} hrs) |\n"
     )
 
-def build_comparison_section(specs: List[QuerySpec], sections: List[str]) -> Optional[str]:
-    """Build comparison card between DAM and GDAM."""
-    
-    # Find DAM and GDAM specs
-    dam_spec = next((s for s in specs if s.market == "DAM"), None)
-    gdam_spec = next((s for s in specs if s.market == "GDAM"), None)
-    
-    if not dam_spec or not gdam_spec:
-        return None
-    
-    # Extract prices from sections (this is a simplification)
-    # In reality, you'd pass the actual data
-    
-    return f"""## 📈 Market Comparison
+def build_comparison_section(
+    base_spec: QuerySpec,
+    dam_spec: Optional[QuerySpec],
+    gdam_spec: Optional[QuerySpec],
+    dam_summary: Optional[Dict[str, Any]],
+    gdam_summary: Optional[Dict[str, Any]],
+) -> Tuple[Optional[str], Optional[go.Figure]]:
+    """Build DAM vs GDAM comparison card with YoY and chart."""
 
-| Market | Period | Action |
-|--------|--------|--------|
-| 📊 DAM | {format_date(dam_spec.start_date)} | See above |
-| 🟢 GDAM | {format_date(gdam_spec.start_date)} | See below |
+    if not dam_spec or not gdam_spec or not dam_summary or not gdam_summary:
+        return None, None
 
-💡 *Scroll down to see GDAM data and comparison*
-"""
+    yoy_dam = collect_shifted_summary(dam_spec, years_back=1)
+    yoy_gdam = collect_shifted_summary(gdam_spec, years_back=1)
+    yoy_lookup = {"DAM": yoy_dam, "GDAM": yoy_gdam}
+
+    base_current = dam_summary if base_spec.market == "DAM" else gdam_summary
+    base_yoy = yoy_lookup.get(base_spec.market)
+
+    period_label = describe_period(base_spec.start_date, base_spec.end_date)
+    compare_label = base_yoy["period_label"] if base_yoy else "Not available"
+
+    yoy_text = format_percentage_delta(
+        base_current.get("primary_price"),
+        base_yoy.get("primary_price") if base_yoy else None,
+    )
+
+    rows = [
+        build_market_row("📊 DAM", dam_summary, gdam_summary, yoy_dam),
+        build_market_row("🟢 GDAM", gdam_summary, dam_summary, yoy_gdam),
+    ]
+
+    card_lines = [
+        "## 📈 Market Comparison",
+        "",
+        "| Field | Value |",
+        "|-------|-------|",
+        f"| **Market** | {dam_spec.market} vs {gdam_spec.market} |",
+        f"| **Period** | {period_label} |",
+        f"| **Period Comparing To** | {compare_label} |",
+        f"| **YoY comparison ({base_spec.market})** | {yoy_text} |",
+        "",
+        "| Market | Period | Volume Traded | Price Traded At | Period Comparing To | Volume (Comparing Period) | Δ vs Other | YoY % Δ |",
+        "|--------|--------|---------------|-----------------|---------------------|---------------------------|------------|----------|",
+    ]
+    card_lines.extend(rows)
+
+    history_points = build_historical_series(
+        dam_spec,
+        gdam_spec,
+        dam_summary,
+        gdam_summary,
+    )
+
+    chart_fig = build_market_chart(history_points)
+
+    return "\n".join(card_lines), chart_fig
 
 
-async def fetch_and_format_data(spec: QuerySpec) -> tuple:
-    """Fetch data and return (KPI, table) as markdown strings."""
-    
+async def fetch_and_format_data(spec: QuerySpec) -> MarketDataBundle:
+    """Fetch data and return bundle with KPI, table, and summary."""
+
+    summary, rows, granularity_used = collect_market_stats(spec)
+    price = format_money(summary.get("primary_price"))
+    basis = summary.get("price_basis", "TWAP")
+
+    method_note = ""
+    if spec.granularity == "hour" and granularity_used == "quarter":
+        method_note = " _(via 15-min slots)_"
+
+    kpi = f"**Average price ({basis}): {price} /kWh**{method_note}\n\n"
+
+    table = ""
+    if spec.stat == "list":
+        table = (
+            format_hourly_table(rows)
+            if granularity_used == "hour"
+            else format_quarter_table(rows)
+        )
+
+    return MarketDataBundle(
+        summary=summary,
+        rows=rows,
+        granularity=granularity_used,
+        kpi=kpi,
+        table=table,
+    )
+
+
+def collect_market_stats(spec: QuerySpec) -> Tuple[Dict[str, Any], List[Dict], str]:
+    """Collect core statistics, returning summary, rows, and granularity used."""
+
+    rows: List[Dict] = []
+    granularity_used = spec.granularity
+    price_key = "price_avg_rs_per_mwh"
+    sched_key = "scheduled_mw_sum"
+    minute_key = "duration_min"
+
     if spec.granularity == "hour":
-        # Try hourly first
-        rows = []
-        for b1, b2 in compress_ranges(spec.hours):
+        hour_indices = spec.hours or list(range(1, 25))
+        hour_ranges = compress_ranges(hour_indices)
+        for b1, b2 in hour_ranges:
             rows += db.fetch_hourly(spec.market, spec.start_date, spec.end_date, b1, b2)
-        
-        if rows:
-            twap = calculate_twap(rows, "price_avg_rs_per_mwh", "duration_min")
-            vwap = calculate_vwap(rows, "price_avg_rs_per_mwh", "scheduled_mw_sum", "duration_min")
-            primary_value = vwap if spec.stat == "vwap" else twap
-            
-            kpi = f"**Average price: {format_money(primary_value)} /kWh**\n\n"
-            table = format_hourly_table(rows) if spec.stat == "list" else ""
-            return kpi, table
-        else:
-            # Fallback to quarter
-            qrows = []
-            slot_ranges = hour_blocks_to_slot_ranges(compress_ranges(spec.hours))
+
+        if not rows:
+            slot_ranges = hour_blocks_to_slot_ranges(hour_ranges)
             for s1, s2 in slot_ranges:
-                qrows += db.fetch_quarter(spec.market, spec.start_date, spec.end_date, s1, s2)
-            
-            twap = calculate_twap(qrows, "price_rs_per_mwh", "duration_min")
-            vwap = calculate_vwap(qrows, "price_rs_per_mwh", "scheduled_mw", "duration_min")
-            primary_value = vwap if spec.stat == "vwap" else twap
-            
-            kpi = f"**Average price: {format_money(primary_value)} /kWh** _(via 15-min slots)_\n\n"
-            table = format_quarter_table(qrows) if spec.stat == "list" else ""
-            return kpi, table
-    
+                rows += db.fetch_quarter(spec.market, spec.start_date, spec.end_date, s1, s2)
+            granularity_used = "quarter"
+            price_key = "price_rs_per_mwh"
+            sched_key = "scheduled_mw"
     else:
-        # Quarter granularity
-        qrows = []
-        for s1, s2 in compress_ranges(spec.slots):
-            qrows += db.fetch_quarter(spec.market, spec.start_date, spec.end_date, s1, s2)
-        
-        twap = calculate_twap(qrows, "price_rs_per_mwh", "duration_min")
-        vwap = calculate_vwap(qrows, "price_rs_per_mwh", "scheduled_mw", "duration_min")
-        primary_value = vwap if spec.stat == "vwap" else twap
-        
-        kpi = f"**Average price: {format_money(primary_value)} /kWh**\n\n"
-        table = format_quarter_table(qrows) if spec.stat == "list" else ""
-        return kpi, table
+        slot_indices = spec.slots or list(range(1, 97))
+        for s1, s2 in compress_ranges(slot_indices):
+            rows += db.fetch_quarter(spec.market, spec.start_date, spec.end_date, s1, s2)
+        granularity_used = "quarter"
+        price_key = "price_rs_per_mwh"
+        sched_key = "scheduled_mw"
+
+    twap = calculate_twap(rows, price_key, minute_key)
+    vwap = calculate_vwap(rows, price_key, sched_key, minute_key)
+    primary_value = vwap if spec.stat == "vwap" else twap
+    volume_mwh = calculate_volume(rows, sched_key, minute_key)
+
+    summary = {
+        "market": spec.market,
+        "start_date": spec.start_date,
+        "end_date": spec.end_date,
+        "period_label": describe_period(spec.start_date, spec.end_date),
+        "primary_price": primary_value,
+        "twap": twap,
+        "vwap": vwap,
+        "volume_mwh": volume_mwh,
+        "price_basis": "VWAP" if spec.stat == "vwap" else "TWAP",
+    }
+
+    return summary, rows, granularity_used
+
+
+def build_market_row(
+    label: str,
+    summary: Dict[str, Any],
+    peer_summary: Optional[Dict[str, Any]],
+    yoy_summary: Optional[Dict[str, Any]],
+) -> str:
+    """Create a markdown row for the comparison table."""
+
+    if not summary:
+        return f"| {label} | — | — | — | — | — | — | — |"
+
+    price = summary.get("primary_price")
+    peer_price = (peer_summary or {}).get("primary_price")
+    yoy_price = (yoy_summary or {}).get("primary_price")
+    compare_period = (yoy_summary or {}).get("period_label") or "Not available"
+    compare_volume = format_volume_value((yoy_summary or {}).get("volume_mwh"))
+
+    return (
+        f"| {label} | {summary.get('period_label', '—')} | {format_volume_value(summary.get('volume_mwh'))} | "
+        f"{format_money(price)} /kWh | {compare_period} | {compare_volume} | "
+        f"{format_percentage_delta(price, peer_price)} | {format_percentage_delta(price, yoy_price)} |"
+    )
+
+
+def collect_shifted_summary(
+    spec: QuerySpec,
+    years_back: int,
+    override_dates: Optional[Tuple[date, date]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch summary for the same period in previous years."""
+
+    shifted_range = override_dates or shift_period_by_years(spec.start_date, spec.end_date, years_back)
+    if not shifted_range:
+        return None
+
+    start_shift, end_shift = shifted_range
+    shifted_spec = clone_spec_for_dates(spec, start_shift, end_shift)
+    summary, _, _ = collect_market_stats(shifted_spec)
+
+    if not summary.get("primary_price") and not summary.get("volume_mwh"):
+        return None
+
+    return summary
+
+
+def build_historical_series(
+    dam_spec: QuerySpec,
+    gdam_spec: QuerySpec,
+    dam_summary: Dict[str, Any],
+    gdam_summary: Dict[str, Any],
+    lookback_years: int = 2,
+) -> List[Dict[str, Any]]:
+    """Prepare historical points for the trend chart."""
+
+    history: List[Dict[str, Any]] = []
+
+    for offset in range(lookback_years, -1, -1):
+        if offset == 0:
+            history.append(
+                {
+                    "label": dam_summary.get("period_label") or describe_period(
+                        dam_spec.start_date, dam_spec.end_date
+                    ),
+                    "dam": dam_summary,
+                    "gdam": gdam_summary,
+                }
+            )
+            continue
+
+        shifted = shift_period_by_years(dam_spec.start_date, dam_spec.end_date, offset)
+        if not shifted:
+            continue
+
+        dam_hist = collect_shifted_summary(dam_spec, offset, override_dates=shifted)
+        gdam_hist = collect_shifted_summary(gdam_spec, offset, override_dates=shifted)
+
+        if not (dam_hist or gdam_hist):
+            continue
+
+        history.append(
+            {
+                "label": describe_period(shifted[0], shifted[1]),
+                "dam": dam_hist or {},
+                "gdam": gdam_hist or {},
+            }
+        )
+
+    return history
+
+
+def build_market_chart(history_points: List[Dict[str, Any]]) -> Optional[go.Figure]:
+    """Build Plotly chart for historical DAM/GDAM prices."""
+
+    if not history_points:
+        return None
+
+    labels = [point.get("label", "") for point in history_points]
+    dam_prices = [point.get("dam", {}).get("primary_price") for point in history_points]
+    gdam_prices = [point.get("gdam", {}).get("primary_price") for point in history_points]
+
+    if not any(price is not None for price in dam_prices + gdam_prices):
+        return None
+
+    fig = go.Figure()
+
+    if any(price is not None for price in dam_prices):
+        dam_hover = [
+            format_volume_hover(point.get("dam", {}).get("volume_mwh"))
+            for point in history_points
+        ]
+        fig.add_trace(
+            go.Scatter(
+                x=labels,
+                y=dam_prices,
+                mode="lines+markers",
+                name="DAM",
+                marker=dict(color="#2563eb"),
+                hovertemplate="<b>DAM</b><br>%{x}<br>Price: ₹%{y:.4f}/kWh<br>%{text}<extra></extra>",
+                text=dam_hover,
+            )
+        )
+
+    if any(price is not None for price in gdam_prices):
+        gdam_hover = [
+            format_volume_hover(point.get("gdam", {}).get("volume_mwh"))
+            for point in history_points
+        ]
+        fig.add_trace(
+            go.Scatter(
+                x=labels,
+                y=gdam_prices,
+                mode="lines+markers",
+                name="GDAM",
+                marker=dict(color="#16a34a"),
+                hovertemplate="<b>GDAM</b><br>%{x}<br>Price: ₹%{y:.4f}/kWh<br>%{text}<extra></extra>",
+                text=gdam_hover,
+            )
+        )
+
+    fig.update_layout(
+        title="DAM & GDAM Price Trend",
+        xaxis_title="Period",
+        yaxis_title="Average Price (₹/kWh)",
+        legend=dict(orientation="h", yanchor="bottom", y=-0.2),
+        margin=dict(l=20, r=20, t=40, b=60),
+    )
+
+    return fig
+
+
+def describe_period(start: date, end: date) -> str:
+    """Human readable period label."""
+
+    if start == end:
+        return format_date(start)
+    return f"{format_date(start)} to {format_date(end)}"
+
+
+def format_volume_value(volume: Optional[float]) -> str:
+    """Format energy volume for display."""
+
+    if volume is None:
+        return "—"
+    if volume >= 1000:
+        return f"{volume / 1000:.2f} GWh"
+    return f"{volume:,.0f} MWh"
+
+
+def format_volume_hover(volume: Optional[float]) -> str:
+    """Hover label for chart volume."""
+
+    value = format_volume_value(volume)
+    return f"Volume: {value if value != '—' else 'N/A'}"
+
+
+def format_percentage_delta(current: Optional[float], reference: Optional[float]) -> str:
+    """Format percentage delta between two values."""
+
+    if current is None or reference is None or reference == 0:
+        return "—"
+
+    diff_pct = ((current - reference) / reference) * 100
+    if diff_pct == 0:
+        return "—"
+
+    arrow = "🔺" if diff_pct > 0 else "🔻"
+    return f"{arrow} {abs(diff_pct):.1f}%"
+
+
+def clone_spec_for_dates(spec: QuerySpec, start: date, end: date) -> QuerySpec:
+    """Clone a QuerySpec while swapping dates."""
+
+    return QuerySpec(
+        market=spec.market,
+        start_date=start,
+        end_date=end,
+        granularity=spec.granularity,
+        hours=list(spec.hours) if spec.hours else None,
+        slots=list(spec.slots) if spec.slots else None,
+        stat=spec.stat,
+        area=spec.area,
+        auto_added=spec.auto_added,
+    )
+
+
+def shift_period_by_years(
+    start: date,
+    end: date,
+    years_back: int,
+) -> Optional[Tuple[date, date]]:
+    """Shift a date range backwards by a number of years."""
+
+    new_start = shift_date_by_years(start, years_back)
+    new_end = shift_date_by_years(end, years_back)
+    if not new_start or not new_end:
+        return None
+    return new_start, new_end
+
+
+def shift_date_by_years(target: date, years_back: int) -> Optional[date]:
+    """Shift single date backwards safely handling leap years."""
+
+    new_year = target.year - years_back
+    if new_year < 1:
+        return None
+
+    last_day = calendar.monthrange(new_year, target.month)[1]
+    day = min(target.day, last_day)
+    return date(new_year, target.month, day)
 
 
 async def fetch_derivatives(spec: QuerySpec, original_query: str) -> str:
     """Fetch and format derivative data if applicable."""
     deriv_block = ""
-    
+
     if spec.start_date == spec.end_date:
         # Single day → last close
         drows = db.fetch_deriv_daily_fallback(spec.end_date, None)
         if drows:
             deriv_block = "\n" + render_deriv_companion_for_day(spec.end_date, drows)
-    
+
     elif same_calendar_month(spec.start_date, spec.end_date) or is_month_intent(original_query, spec.start_date, spec.end_date):
         # Range in one month
         drows = db.fetch_deriv_daily_fallback(spec.end_date, None)
-        
+
         filtered = []
         seen_ex = set()
         for r in drows:
@@ -417,8 +764,15 @@ async def fetch_derivatives(spec: QuerySpec, original_query: str) -> str:
         drows = db.fetch_deriv_daily_fallback(spec.end_date, None)
         if drows:
             deriv_block = "\n" + render_deriv_companion_for_day(spec.end_date, drows)
-    
-    return deriv_block
+
+    if deriv_block:
+        return deriv_block
+
+    period_label = describe_period(spec.start_date, spec.end_date)
+    return (
+        f"### **Derivative Market (MCX/NSE)** — {period_label}\n\n"
+        "_Derivative market price not available for this period._"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -444,6 +798,23 @@ def calculate_vwap(rows, price_key: str, sched_key: str, minute_key: str):
     if den > 0:
         return (num / den) / 1000.0
     return calculate_twap(rows, price_key, minute_key)
+
+
+def calculate_volume(rows, sched_key: str, minute_key: str) -> Optional[float]:
+    """Calculate total traded volume in MWh."""
+
+    if not rows:
+        return None
+
+    total = 0.0
+    for row in rows:
+        sched = row.get(sched_key)
+        minutes = row.get(minute_key)
+        if sched is None or minutes is None:
+            continue
+        total += float(sched) * (float(minutes) / 60.0)
+
+    return total if total > 0 else None
 
 
 def hour_blocks_to_slot_ranges(hour_ranges):
