@@ -401,8 +401,8 @@ def build_comparison_section(
         f"| **Period Comparing To** | {compare_label} |",
         f"| **YoY comparison ({base_spec.market})** | {yoy_text} |",
         "",
-        "| Market | Period | Volume Traded | Price Traded At | Δ vs Other | YoY Δ |",
-        "|--------|--------|---------------|-----------------|------------|-------|",
+        "| Market | Period | Volume Traded | Price Traded At | Period Comparing To | Volume (Comparing Period) | Δ vs Other | YoY % Δ |",
+        "|--------|--------|---------------|-----------------|---------------------|---------------------------|------------|----------|",
     ]
     card_lines.extend(rows)
 
@@ -507,16 +507,18 @@ def build_market_row(
     """Create a markdown row for the comparison table."""
 
     if not summary:
-        return f"| {label} | — | — | — | — | — |"
+        return f"| {label} | — | — | — | — | — | — | — |"
 
     price = summary.get("primary_price")
     peer_price = (peer_summary or {}).get("primary_price")
     yoy_price = (yoy_summary or {}).get("primary_price")
+    compare_period = (yoy_summary or {}).get("period_label") or "Not available"
+    compare_volume = format_volume_value((yoy_summary or {}).get("volume_mwh"))
 
     return (
         f"| {label} | {summary.get('period_label', '—')} | {format_volume_value(summary.get('volume_mwh'))} | "
-        f"{format_money(price)} /kWh | {format_percentage_delta(price, peer_price)} | "
-        f"{format_percentage_delta(price, yoy_price)} |"
+        f"{format_money(price)} /kWh | {compare_period} | {compare_volume} | "
+        f"{format_percentage_delta(price, peer_price)} | {format_percentage_delta(price, yoy_price)} |"
     )
 
 
