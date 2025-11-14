@@ -401,8 +401,8 @@ def build_comparison_section(
         f"| **Period Comparing To** | {compare_label} |",
         f"| **YoY comparison ({base_spec.market})** | {yoy_text} |",
         "",
-        "| Market | Period | Volume Traded | Price Traded At | Period Comparing To | Volume (Comparing Period) | Δ vs Other | YoY % Δ |",
-        "|--------|--------|---------------|-----------------|---------------------|---------------------------|------------|----------|",
+        "| Market | Period | Volume Traded | Price Traded At | Period Comparing To | Volume (Comparing Period) | Price (Comparing Period) | Δ vs Other | YoY % Δ |",
+        "|--------|--------|---------------|-----------------|---------------------|---------------------------|--------------------------|------------|----------|",
     ]
     card_lines.extend(rows)
 
@@ -518,7 +518,8 @@ def build_market_row(
     return (
         f"| {label} | {summary.get('period_label', '—')} | {format_volume_value(summary.get('volume_mwh'))} | "
         f"{format_money(price)} /kWh | {compare_period} | {compare_volume} | "
-        f"{format_percentage_delta(price, peer_price)} | {format_percentage_delta(price, yoy_price)} |"
+        f"{format_money(yoy_price)} /kWh | {format_percentage_delta(price, peer_price)} | "
+        f"{format_percentage_delta(price, yoy_price)} |"
     )
 
 
