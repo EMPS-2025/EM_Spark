@@ -32,7 +32,7 @@ class DateParser:
         "dec": 12, "december": 12
     }
     
-    MONTH_PATTERN = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)"
+    MONTH_PATTERN = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)"
     
     DATE_MIN = date(2010, 1, 1)  # Minimum valid date
     
