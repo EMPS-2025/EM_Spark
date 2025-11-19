@@ -17,6 +17,7 @@ class QuerySpec:
     slots: Optional[List[int]]      # 1-96 for 15-min slots
     stat: str                       # 'list', 'twap', 'vwap', 'daily_avg'
     area: str = "ALL"
+    auto_added: bool = False
     
     def __repr__(self):
         time_range = f"hours={self.hours}" if self.hours else f"slots={self.slots}"

@@ -38,3 +38,8 @@ def normalize_text(text: str) -> str:
 def highlight_gdam(text: str) -> str:
     """Highlight GDAM with green dot emoji (works in markdown tables)."""
     return re.sub(r'\b(GDAM)\b', r'🟢 **\1**', text)
+
+
+def highlight_rtm(text: str) -> str:
+    """Highlight RTM with blue dot emoji."""
+    return re.sub(r'\b(RTM)\b', r'🔵 **\1**', text)

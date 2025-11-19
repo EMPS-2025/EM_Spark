@@ -32,7 +32,7 @@ class DateParser:
         "dec": 12, "december": 12
     }
     
-    MONTH_PATTERN = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)"
+    MONTH_PATTERN = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)"
     
     DATE_MIN = date(2010, 1, 1)  # Minimum valid date
     
@@ -75,11 +75,13 @@ class DateParser:
         
         # Strategy 2: "Month YYYY, Month YYYY, Month YYYY" pattern
         pattern = rf'\b({self.MONTH_PATTERN})\s+(\d{{4}})\b'
-        matches = re.findall(pattern, lower, re.I)
-        
-        if len(matches) > 1:
+        match_iter = list(re.finditer(pattern, lower, re.I))
+
+        if len(match_iter) > 1:
             seen = set()
-            for month_name, year_str in matches:
+            for match in match_iter:
+                month_name = match.group(1)
+                year_str = match.group(2)
                 if month_name in self.MONTHS:
                     try:
                         year = int(year_str)
@@ -133,6 +135,7 @@ class DateParser:
         patterns = [
             self._parse_day_month_to_day_month_year,
             self._parse_day_month_year_range,
+            self._parse_month_to_month_range,
             self._parse_day_range_same_month,
             self._parse_numeric_range,
             self._parse_single_numeric_date,
@@ -214,6 +217,54 @@ class DateParser:
             
             return (date(year, mon, min(d1, d2)), date(year, mon, max(d1, d2)))
         return (None, None)
+    def _parse_month_to_month_range(self, text: str, today: date) -> Tuple[Optional[date], Optional[date]]:
+        """Nov 2024 to Feb 2025"""
+
+        m = re.search(
+            rf'(?:from\s+)?{self.MONTH_PATTERN}\s+(\d{{2,4}})\s*(?:to|-)\s*{self.MONTH_PATTERN}\s+(\d{{2,4}})',
+            text,
+            re.I,
+        )
+
+        if m:
+            mon1 = self.MONTHS[m.group(1)]
+            year1 = int(m.group(2))
+            mon2 = self.MONTHS[m.group(3)]
+            year2 = int(m.group(4))
+
+            if year1 < 100:
+                year1 += 2000
+            if year2 < 100:
+                year2 += 2000
+
+            start_key = (year1, mon1)
+            end_key = (year2, mon2)
+
+            if start_key <= end_key:
+                start_year, start_mon = start_key
+                end_year, end_mon = end_key
+            else:
+                start_year, start_mon = end_key
+                end_year, end_mon = start_key
+
+            start = date(start_year, start_mon, 1)
+            last_day = calendar.monthrange(end_year, end_mon)[1]
+            end = date(end_year, end_mon, last_day)
+
+            return (start, end)
+
+        return (None, None)
+    
+    def _normalize_year(self, year_str: Optional[str]) -> Optional[int]:
+        if not year_str:
+            return None
+        try:
+            year = int(year_str)
+            if year < 100:
+                year += 2000
+            return year
+        except ValueError:
+            return None
     
     def _parse_numeric_range(self, text: str, today: date) -> Tuple[Optional[date], Optional[date]]:
         """31/10/2025 to 15/11/2025"""

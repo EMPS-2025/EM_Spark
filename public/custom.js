@@ -282,331 +282,200 @@
 
 (function() {
   'use strict';
-  
+
+  // Wait for DOM to be ready
   const onReady = () => {
-    console.log('✅ EM Spark initialized');
+    console.log('✅ EM Spark UI initialized');
     
-    // 1. Remove all Chainlit branding
-    removeChainlitBranding();
-    
-    // 2. Enhanced placeholder
+    // 1. Enhanced placeholder text
     updatePlaceholder();
     
-    // 3. Quick actions
+    // 2. Auto-focus input on load
+    focusInput();
+    
+    // 3. Add quick action buttons
     addQuickActions();
     
-    // 4. Watch for changes
+    // 4. Handle keyboard shortcuts
+    setupKeyboardShortcuts();
+    
+    // 5. Add welcome animation
+    addWelcomeAnimation();
+    
+    // 6. Watch for dynamic content changes
     observeChanges();
-    
-    // 5. Custom header
-    addCustomHeader();
   };
-  
+
   // ═══════════════════════════════════════════════════════════
-  // 1. REMOVE ALL CHAINLIT BRANDING
+  // 1. Enhanced Placeholder
   // ═══════════════════════════════════════════════════════════
-  
-  function removeChainlitBranding() {
-    // Remove Chainlit logo
-    const removeLogos = () => {
-      // Find and remove logo images
-      document.querySelectorAll('img[alt*="Chainlit"], img[src*="chainlit"], img[alt*="chainlit"]').forEach(el => {
-        el.style.display = 'none';
-        el.remove();
-      });
-      
-      // Find and remove logo links
-      document.querySelectorAll('a[href*="chainlit"]').forEach(el => {
-        el.style.display = 'none';
-        el.remove();
-      });
-      
-      // Remove footer
-      document.querySelectorAll('footer, [data-testid="footer"]').forEach(el => {
-        el.style.display = 'none';
-        el.remove();
-      });
-      
-      // Hide sidebar
-      document.querySelectorAll('[data-testid="sidebar"], aside, .MuiDrawer-root').forEach(el => {
-        el.style.display = 'none';
-      });
-      
-      // Remove "Powered by" text
-      document.querySelectorAll('*').forEach(el => {
-        if (el.textContent && el.textContent.toLowerCase().includes('powered by chainlit')) {
-          el.style.display = 'none';
-          el.remove();
-        }
-      });
-    };
-    
-    removeLogos();
-    setInterval(removeLogos, 1000); // Keep checking
-  }
-  
-  // ═══════════════════════════════════════════════════════════
-  // 2. CUSTOM HEADER
-  // ═══════════════════════════════════════════════════════════
-  
-  function addCustomHeader() {
-    if (document.getElementById('custom-header')) return;
-    
-    const header = document.createElement('div');
-    header.id = 'custom-header';
-    header.innerHTML = `
-      <style>
-        #custom-header {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 60px;
-          background: linear-gradient(135deg, #2563eb, #1e40af);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 0 2rem;
-          z-index: 100;
-        }
-        
-        #custom-header .logo {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-        }
-        
-        #custom-header .logo-icon {
-          width: 32px;
-          height: 32px;
-          background: white;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          color: #2563eb;
-          font-size: 1.25rem;
-        }
-        
-        #custom-header .logo-text {
-          color: white;
-          font-size: 1.25rem;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-        }
-        
-        #custom-header .tagline {
-          color: rgba(255, 255, 255, 0.9);
-          font-size: 0.875rem;
-          font-weight: 500;
-        }
-        
-        /* Adjust main content to account for header */
-        .cl__messages,
-        [data-testid="messages-container"],
-        main {
-          margin-top: 80px !important;
-        }
-        
-        @media (max-width: 768px) {
-          #custom-header {
-            padding: 0 1rem;
-          }
-          
-          #custom-header .tagline {
-            display: none;
-          }
-        }
-      </style>
-      
-      <div class="logo">
-        <div class="logo-icon">⚡</div>
-        <div class="logo-text">EM Spark</div>
-      </div>
-      <div class="tagline">Energy Market Intelligence</div>
-    `;
-    
-    document.body.insertBefore(header, document.body.firstChild);
-  }
-  
-  // ═══════════════════════════════════════════════════════════
-  // 3. ENHANCED PLACEHOLDER
-  // ═══════════════════════════════════════════════════════════
-  
   function updatePlaceholder() {
     const setPlaceholder = () => {
       const textarea = document.querySelector('textarea');
-      if (textarea && !textarea.dataset.customPlaceholder) {
-        textarea.placeholder = "Ask about energy markets... e.g., 'DAM yesterday' or 'Compare Nov 2022 vs 2023'";
-        textarea.dataset.customPlaceholder = 'true';
+      if (textarea && !textarea.dataset.placeholderSet) {
+        textarea.placeholder = "Ask about energy markets... e.g., 'DAM yesterday' or 'GDAM 20-50 slots'";
+        textarea.dataset.placeholderSet = 'true';
       }
     };
-    
     setPlaceholder();
     setInterval(setPlaceholder, 1000);
   }
-  
+
   // ═══════════════════════════════════════════════════════════
-  // 4. QUICK ACTION BUTTONS
+  // 2. Auto-focus Input
   // ═══════════════════════════════════════════════════════════
-  
+  function focusInput() {
+    setTimeout(() => {
+      const textarea = document.querySelector('textarea');
+      if (textarea) {
+        textarea.focus();
+      }
+    }, 500);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 3. Quick Action Buttons
+  // ═══════════════════════════════════════════════════════════
   function addQuickActions() {
     if (document.getElementById('quick-actions')) return;
-    
+
+    const examples = [
+      { emoji: '📊', text: 'DAM rate today', query: 'DAM rate for today' },
+      { emoji: '🟢', text: 'GDAM yesterday', query: 'GDAM rate for yesterday' },
+      { emoji: '🔵', text: 'RTM last hour', query: 'RTM rate for last hour' },
+      { emoji: '📈', text: 'Compare markets', query: 'Compare DAM and GDAM for today' },
+    ];
+
     const container = document.createElement('div');
     container.id = 'quick-actions';
-    container.innerHTML = `
-      <style>
-        #quick-actions {
-          max-width: 1200px;
-          margin: 0 auto 2rem;
-          padding: 0 1rem;
-        }
-        
-        .quick-actions-title {
-          font-size: 0.875rem;
-          font-weight: 600;
-          color: #6b7280;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          margin-bottom: 1rem;
-        }
-        
-        .quick-actions-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-          gap: 1rem;
-        }
-        
-        .quick-action-card {
-          background: white;
-          border: 2px solid #e5e7eb;
-          border-radius: 1rem;
-          padding: 1.25rem;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-        }
-        
-        .quick-action-card:hover {
-          border-color: #2563eb;
-          transform: translateY(-2px);
-          box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-        }
-        
-        .quick-action-card .icon {
-          font-size: 2rem;
-          margin-bottom: 0.5rem;
-        }
-        
-        .quick-action-card .title {
-          font-weight: 600;
-          color: #111827;
-          margin-bottom: 0.25rem;
-        }
-        
-        .quick-action-card .description {
-          font-size: 0.875rem;
-          color: #6b7280;
-        }
-      </style>
-      
-      <div class="quick-actions-title">Quick Examples</div>
-      <div class="quick-actions-grid">
-        <div class="quick-action-card" data-query="DAM today">
-          <div class="icon">📊</div>
-          <div class="title">Today's DAM</div>
-          <div class="description">Current market prices</div>
-        </div>
-        
-        <div class="quick-action-card" data-query="GDAM today">
-          <div class="icon">🟢</div>
-          <div class="title">GDAM Today</div>
-          <div class="description">Green energy market</div>
-        </div>
-        
-        <div class="quick-action-card" data-query="Compare DAM and GDAM yesterday">
-          <div class="icon">📈</div>
-          <div class="title">DAM vs GDAM</div>
-          <div class="description">Side-by-side comparison</div>
-        </div>
-        
-        <div class="quick-action-card" data-query="Compare Nov 2023 vs Nov 2024">
-          <div class="icon">📉</div>
-          <div class="title">Year Over Year</div>
-          <div class="description">Historical comparison</div>
-        </div>
-      </div>
+    container.style.cssText = `
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      padding: 0 1rem;
     `;
-    
-    const messagesContainer = document.querySelector('[data-testid="messages-container"], .cl__messages, main');
-    if (messagesContainer) {
-      messagesContainer.insertAdjacentElement('afterbegin', container);
+
+    examples.forEach(ex => {
+      const btn = document.createElement('button');
+      btn.innerHTML = `${ex.emoji} ${ex.text}`;
+      btn.style.cssText = `
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid #e5e7eb;
+        background: white;
+        color: #111827;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      `;
       
-      container.querySelectorAll('.quick-action-card').forEach(card => {
-        card.addEventListener('click', () => {
-          const query = card.dataset.query;
-          sendMessage(query);
-        });
-      });
-    }
-  }
-  
-  // ═══════════════════════════════════════════════════════════
-  // HELPER: SEND MESSAGE
-  // ═══════════════════════════════════════════════════════════
-  
-  function sendMessage(text) {
-    const textarea = document.querySelector('textarea');
-    const sendButton = document.querySelector('[data-testid="send-button"]');
-    
-    if (textarea) {
-      textarea.value = text;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      textarea.focus();
+      btn.onmouseover = () => {
+        btn.style.background = '#f3f4f6';
+        btn.style.borderColor = '#2563eb';
+      };
       
-      setTimeout(() => {
-        if (sendButton && !sendButton.disabled) {
-          sendButton.click();
+      btn.onmouseout = () => {
+        btn.style.background = 'white';
+        btn.style.borderColor = '#e5e7eb';
+      };
+      
+      btn.onclick = () => {
+        const textarea = document.querySelector('textarea');
+        if (textarea) {
+          textarea.value = ex.query;
+          textarea.focus();
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
         }
-      }, 100);
-    }
+      };
+      
+      container.appendChild(btn);
+    });
+
+    setTimeout(() => {
+      const inputArea = document.querySelector('.cl__composer, [data-testid="input-box"]');
+      if (inputArea) {
+        inputArea.insertAdjacentElement('beforebegin', container);
+      }
+    }, 1000);
   }
-  
+
   // ═══════════════════════════════════════════════════════════
-  // OBSERVER: WATCH FOR CHANGES
+  // 4. Keyboard Shortcuts
   // ═══════════════════════════════════════════════════════════
-  
+  function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+      // Cmd/Ctrl + K to focus search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const textarea = document.querySelector('textarea');
+        if (textarea) textarea.focus();
+      }
+      
+      // Cmd/Ctrl + Enter to submit
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        const button = document.querySelector('[data-testid="send-button"]');
+        if (button) button.click();
+      }
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 5. Welcome Animation
+  // ═══════════════════════════════════════════════════════════
+  function addWelcomeAnimation() {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      .cl__message {
+        animation: slideDown 0.3s ease-out;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 6. Watch for Dynamic Content Changes
+  // ═══════════════════════════════════════════════════════════
   function observeChanges() {
     const observer = new MutationObserver(() => {
-      removeChainlitBranding();
-      updatePlaceholder();
-      
-      if (!document.getElementById('quick-actions')) {
-        setTimeout(addQuickActions, 500);
-      }
-      
-      if (!document.getElementById('custom-header')) {
-        addCustomHeader();
+      // Re-apply placeholder if DOM changed
+      const textarea = document.querySelector('textarea');
+      if (textarea && !textarea.dataset.placeholderSet) {
+        updatePlaceholder();
       }
     });
+
+    const config = { 
+      childList: true, 
+      subtree: true,
+      attributes: false,
+      characterData: false 
+    };
     
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+    const rootElement = document.documentElement;
+    observer.observe(rootElement, config);
   }
-  
-  // ═══════════════════════════════════════════════════════════
-  // INITIALIZE
-  // ═══════════════════════════════════════════════════════════
-  
+
+  // Initialize when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', onReady);
   } else {
     onReady();
   }
-  
+
+  // Also initialize after a short delay to catch late-loading content
+  setTimeout(onReady, 1000);
+
 })();

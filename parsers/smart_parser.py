@@ -38,6 +38,7 @@ class SmartParser:
         - "DAM today"
         - "show me gdam prices for yesterday"
         - "what was the price on 31 oct 2025"
+        - "RTM for 14 Nov 2025 8-9 hrs"
         - "compare dam and gdam for last week"
         - "November 2022, 2023, 2024 comparison"
         """
@@ -47,7 +48,7 @@ class SmartParser:
         specs = self._simple_parse(normalized)
         if specs:
             print("✓ Parsed using simple patterns")
-            return specs
+            return self._apply_time_groups(specs, normalized)
         
         # Tier 2: Try rule-based parsing (fast, free)
         specs = self._rule_based_parse(normalized)
@@ -57,7 +58,7 @@ class SmartParser:
         
         # Tier 3: Use OpenAI (slower, costs money, but handles anything)
         if self.openai_client:
-            specs = self._openai_parse(user_query)
+            specs = self._openai_parse(user_query, normalized)
             if specs:
                 print("✓ Parsed using OpenAI GPT")
                 return specs
@@ -74,9 +75,10 @@ class SmartParser:
         """Handle simple, common queries instantly."""
         lower = text.lower()
         
-        # Pattern: "DAM today"
-        if re.match(r'^(dam|gdam)\s+(today|yesterday)$', lower):
-            market = "GDAM" if "gdam" in lower else "DAM"
+        # Pattern: "DAM/GDAM/RTM today/yesterday"
+        m = re.match(r'^(dam|gdam|rtm)\s+(today|yesterday)$', lower)
+        if m:
+            market = m.group(1).upper()
             
             if "today" in lower:
                 d = date.today()
@@ -94,13 +96,16 @@ class SmartParser:
                 stat="twap"
             )]
         
-        # Pattern: "GDAM 31 Oct 2025"
-        match = re.match(r'^(dam|gdam)\s+(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+(\d{4})$', lower)
-        if match:
-            market = match.group(1).upper()
-            day = int(match.group(2))
-            month_name = match.group(3)
-            year = int(match.group(4))
+        # Pattern: "DAM/GDAM/RTM DD Mon YYYY"
+        m = re.match(
+            r'^(dam|gdam|rtm)\s+(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+(\d{4})$',
+            lower
+        )
+        if m:
+            market = m.group(1).upper()
+            day = int(m.group(2))
+            month_name = m.group(3)
+            year = int(m.group(4))
             
             months = {
                 "jan": 1, "feb": 2, "mar": 3, "apr": 4,
@@ -130,7 +135,7 @@ class SmartParser:
     def _rule_based_parse(self, text: str) -> Optional[List[QuerySpec]]:
         """Use existing parsers with better fallback."""
         
-        # Detect market
+        # Detect market (now includes RTM)
         market = self._parse_market(text)
         stat = self._parse_stat(text)
         
@@ -170,7 +175,7 @@ class SmartParser:
     # Tier 3: OpenAI-Powered Parsing
     # ═══════════════════════════════════════════════════════════
     
-    def _openai_parse(self, user_query: str) -> Optional[List[QuerySpec]]:
+    def _openai_parse(self, user_query: str, normalized: str) -> Optional[List[QuerySpec]]:
         """Use OpenAI to understand complex queries."""
         
         if not self.openai_client:
@@ -179,7 +184,7 @@ class SmartParser:
         system_prompt = """You are a query parser for an energy market analysis system.
 
 Parse the user's query and extract:
-- market: "DAM" or "GDAM" (default: "DAM")
+- market: "DAM", "GDAM", or "RTM" (default: "DAM")
 - start_date: in YYYY-MM-DD format
 - end_date: in YYYY-MM-DD format
 - granularity: "hour" or "quarter" (default: "hour")
@@ -190,8 +195,9 @@ Parse the user's query and extract:
 For comparison queries, return multiple queries in an array.
 
 Examples:
-- "DAM today" → {"market": "DAM", "start_date": "2025-11-13", "end_date": "2025-11-13", "granularity": "hour", "hours": [1-24], "stat": "twap"}
-- "Compare Nov 2022 and Nov 2023" → [{"start_date": "2022-11-01", "end_date": "2022-11-30", ...}, {"start_date": "2023-11-01", ...}]
+- "DAM today" → {"market": "DAM", "start_date": "2025-11-17", "end_date": "2025-11-17", "granularity": "hour", "hours": [1-24], "stat": "twap"}
+- "RTM for 14 Nov 2025 8-9 hrs" → {"market": "RTM", "start_date": "2025-11-14", "end_date": "2025-11-14", "hours": [8,9], ...}
+- "GDAM for 15-24 hrs and 3-9 hrs for 17 Oct 2025" → {"market": "GDAM", "start_date": "2025-10-17", "end_date": "2025-10-17", "hours": [3,4,5,6,7,8,9,15,16,17,18,19,20,21,22,23,24], ...}
 
 Return ONLY valid JSON. No explanations."""
 
@@ -202,8 +208,7 @@ Return ONLY valid JSON. No explanations."""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Parse this query: {user_query}"}
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.1
+                response_format={"type": "json_object"}
             )
             
             content = response.choices[0].message.content
@@ -235,7 +240,7 @@ Return ONLY valid JSON. No explanations."""
                     print(f"Failed to parse OpenAI response item: {e}")
                     continue
             
-            return specs if specs else None
+            return self._apply_time_groups(specs, normalized) if specs else None
             
         except Exception as e:
             print(f"OpenAI parsing error: {e}")
@@ -246,9 +251,14 @@ Return ONLY valid JSON. No explanations."""
     # ═══════════════════════════════════════════════════════════
     
     def _parse_market(self, text: str) -> str:
-        """Extract market type."""
+        """Extract market type (now includes RTM)."""
+        # Check RTM first (most specific)
+        if re.search(r'\b(rtm|real[-\s]*time)\b', text, re.I):
+            return "RTM"
+        # Then GDAM
         if re.search(r'\b(gdam|green\s*day[-\s]*ahead)\b', text, re.I):
             return "GDAM"
+        # Default to DAM
         return "DAM"
     
     def _parse_stat(self, text: str) -> str:
@@ -287,11 +297,48 @@ Return ONLY valid JSON. No explanations."""
                 unique.append(spec)
         
         return unique
+    
+    def _apply_time_groups(self, specs: List[QuerySpec], text: str) -> List[QuerySpec]:
+        """Overlay explicit time groups on parsed specs."""
+        groups = self.time_parser.parse_time_groups(text)
+        if not groups:
+            return specs
+
+        default_hours = tuple(range(1, 25))
+        default_slots = tuple(range(1, 97))
+        adjusted: List[QuerySpec] = []
+
+        for spec in specs:
+            hours_tuple = tuple(spec.hours or [])
+            slots_tuple = tuple(spec.slots or [])
+            has_custom_hours = bool(hours_tuple and hours_tuple != default_hours)
+            has_custom_slots = bool(slots_tuple and slots_tuple != default_slots)
+
+            if has_custom_hours or has_custom_slots:
+                adjusted.append(spec)
+                continue
+
+            for group in groups:
+                adjusted.append(
+                    QuerySpec(
+                        market=spec.market,
+                        start_date=spec.start_date,
+                        end_date=spec.end_date,
+                        granularity=group["granularity"],
+                        hours=group.get("hours"),
+                        slots=group.get("slots"),
+                        stat=spec.stat,
+                        area=spec.area,
+                        auto_added=spec.auto_added,
+                    )
+                )
+
+        return self._deduplicate_specs(adjusted) if adjusted else specs
 
 
-# ═══════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
 # Example Usage
-# ═══════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     from core.config import Config
@@ -301,11 +348,15 @@ if __name__ == "__main__":
     
     test_queries = [
         "DAM today",
+        "RTM yesterday",
         "show me gdam prices for yesterday",
         "what was the price on 31 oct 2025",
+        "DAM rate for 14 Nov 2025",
+        "RTM for 14 Nov 2025 8-9 hrs",
+        "GDAM for 15-24 hrs and 3-9 hrs for 17 Oct 2025",
         "compare dam and gdam for last week",
         "November 2022, 2023, 2024",
-        "give me detailed list for 20-50 slots on Oct 12 2024",
+        "DAM rate for 16-24 from Oct 2024 to Feb 2025",
     ]
     
     for query in test_queries:
