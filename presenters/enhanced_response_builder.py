@@ -1,105 +1,283 @@
 # presenters/enhanced_response_builder.py
-"""EM-SPARK Response Builder - Markdown Format"""
+"""EM-SPARK Response Builder - HTML Format for Figma-like UI"""
 
-from datetime import date
-from typing import List, Dict, Optional, Any
-
+from typing import List, Dict, Any
 
 class EnhancedResponseBuilder:
-    """Build Markdown responses"""
-
-    def build_overview_header(self, market_badge: str, date_label: str,
-        selection_details: Dict[str, Any], user_query: str) -> str:
-        return f"""## {market_badge}
-
-**Delivery:** {date_label}  
-**Time Window:** {selection_details['time_label']}  
-**Query:** {user_query[:80]}
-"""
-
-    def build_snapshot_card(self, market: str, delivery_label: str, time_window: str,
-        twap: float, min_price: float, max_price: float, total_volume_gwh: float) -> str:
-        emoji = {"DAM": "📊", "GDAM": "🟢", "RTM": "🔵"}.get(market, "📈")
-        return f"""### {emoji} {market} Snapshot
-
-| **Metric** | **Value** |
-|-----------|----------|
-| Delivery | {delivery_label} |
-| Time Window | {time_window} |
-| TWAP | ₹{twap:.4f} /kWh |
-| Min / Max | ₹{min_price:.4f} / ₹{max_price:.4f} /kWh |
-| Total Volume | {total_volume_gwh:.2f} GWh |
-"""
-
-    def build_derivative_section(self, derivative_rows: List[Dict]) -> str:
-        """Build derivative section - THIS METHOD WAS MISSING"""
-        if not derivative_rows:
-            return "### 💹 Derivative Market (MCX/NSE)\n\nNo data available.\n"
+    
+    def _format_yoy_chip(self, value: float) -> str:
+        if value == 0:
+            return '<span style="color: #64748b; font-size: 0.85em;">-</span>'
+            
+        color = "#166534" if value > 0 else "#991b1b"
+        bg = "#dcfce7" if value > 0 else "#fee2e2"
+        icon = "▲" if value > 0 else "▼"
+        text = f"{abs(value):.1f}%"
         
-        lines = ["### 💹 Derivative Market (MCX/NSE)\n"]
+        return f'<span style="background-color: {bg}; color: {color}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">{icon} {text}</span>'
+
+    def build_overview_header(self, market_badge: str, date_label: str, selection_details: Dict[str, Any], user_query: str) -> str:
+        # No indentation in the HTML string to prevent Markdown code block rendering
+        return (
+f'<div style="margin-bottom: 24px;">'
+f'<div style="font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Market Intelligence</div>'
+f'<h1 style="font-size: 1.75rem; font-weight: 700; color: #0f172a; margin: 0;">{market_badge}</h1>'
+f'<div style="display: flex; gap: 16px; margin-top: 12px; font-size: 0.9rem; color: #475569;">'
+f'<span>📅 <strong>{date_label}</strong></span>'
+f'<span>⏰ {selection_details["time_label"]}</span>'
+f'</div>'
+f'</div>'
+        )
+
+    # presenters/enhanced_response_builder.py - UPDATE build_snapshot_card METHOD
+
+    def build_snapshot_card(
+        self, 
+        market: str, 
+        delivery_label: str, 
+        time_window: str, 
+        twap: float, 
+        min_price: float,  # Keep parameter for backwards compatibility
+        max_price: float,  # Keep parameter for backwards compatibility
+        total_volume_gwh: float
+    ) -> str:
+        """
+        Build market snapshot card - showing only Avg Price and Volume (min/max removed).
+        """
+        return (
+f'<div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px;">'\
+f'<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px;">'\
+f'<div>'\
+f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Avg. Price</div>'\
+f'<div style="font-size: 2rem; font-weight: 700; color: #0056D2; margin-top: 8px;">₹{twap:.2f} <span style="font-size: 1rem; color: #64748b; font-weight: 400;">/kWh</span></div>'\
+f'</div>'\
+f'<div>'\
+f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Total Volume</div>'\
+f'<div style="font-size: 2rem; font-weight: 700; color: #0f172a; margin-top: 8px;">{total_volume_gwh:.1f} <span style="font-size: 1rem; color: #64748b; font-weight: 400;">GWh</span></div>'\
+f'</div>'\
+f'</div>'\
+f'</div>'
+    )
+
+
+    # presenters/enhanced_response_builder.py - UPDATE build_derivative_section METHOD
+
+    def build_derivative_section(self, derivative_rows: List[Dict], actual_trading_date=None, requested_date=None) -> str:
+        """
+        Build derivative market section with actual trading date display.
+        """
+        # Handle case where derivative market didn't exist
+        if derivative_rows is None or (isinstance(derivative_rows, list) and len(derivative_rows) == 0 and actual_trading_date is None):
+            return (
+f'<div style="background: #fef3c7; border-radius: 12px; padding: 20px; border: 1px solid #fbbf24; margin-bottom: 24px;">'\
+f'<div style="display: flex; align-items: center; gap: 12px;">'\
+f'<div style="font-size: 1.5rem;">ℹ️</div>'\
+f'<div>'\
+f'<div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">Derivative Market Not Available</div>'\
+f'<div style="font-size: 0.875rem; color: #78350f;">The electricity derivative market (futures) started operations from <strong>July 2025</strong> onwards.</div>'\
+f'</div>'\
+f'</div>'\
+f'</div>'
+            )
+        
+        if not derivative_rows:
+            return ""
+        
+        # Build date label
+        date_label = ""
+        if actual_trading_date and requested_date:
+            if actual_trading_date != requested_date:
+                date_label = f' • Showing {actual_trading_date.strftime("%d %b %Y")} (Last Trading Day)'
+            else:
+                date_label = f' • Trading Date: {actual_trading_date.strftime("%d %b %Y")}'
+        elif actual_trading_date:
+            date_label = f' • Trading Date: {actual_trading_date.strftime("%d %b %Y")}'
+        
+        rows_html = ""
         for row in derivative_rows:
             exchange = row.get('exchange', 'N/A')
-            commodity = row.get('commodity', 'N/A')
-            contract_month = row.get('contract_month', 'N/A')
-            close_price = float(row.get('close_price_rs_per_mwh', 0)) / 1000.0
-            lines.append(f"- **{exchange} • {commodity} • {contract_month}** → ₹{close_price:.2f}/kWh")
-        return "\n".join(lines) + "\n"
+            price_kwh = float(row.get('close_price_rs_per_mwh', 0) or 0) / 1000.0
+            month = row.get('contract_month', 'N/A')
+            if hasattr(month, 'strftime'):
+                month = month.strftime('%b %Y')
+            
+            rows_html += (
+f'<tr style="border-bottom: 1px solid #f1f5f9;">'\
+f'<td style="padding: 12px 16px; font-weight: 600;">{exchange}</td>'\
+f'<td style="padding: 12px 16px;">{row.get("commodity", "N/A")}</td>'\
+f'<td style="padding: 12px 16px;">{month}</td>'\
+f'<td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600;">₹{price_kwh:.2f}</td>'\
+f'</tr>'
+            )
+        
+        return (
+f'<div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">'\
+f'<div style="background: linear-gradient(to right, #0056D2, #0041a3); color: white; padding: 12px 16px; font-weight: 600; font-size: 0.95rem;">'\
+f'💹 Derivative Market (Futures){date_label}'\
+f'</div>'\
+f'<table style="width: 100%; border-collapse: collapse;">'\
+f'<thead style="background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase;">'\
+f'<tr>'\
+f'<th style="padding: 10px 16px; text-align: left;">Exchange</th>'\
+f'<th style="padding: 10px 16px; text-align: left;">Commodity</th>'\
+f'<th style="padding: 10px 16px; text-align: left;">Month</th>'\
+f'<th style="padding: 10px 16px; text-align: right;">Close Price</th>'\
+f'</tr>'\
+f'</thead>'\
+f'<tbody>'\
+f'{rows_html}'\
+f'</tbody>'\
+f'</table>'\
+f'</div>'
+        )
 
-    def build_market_comparison_section(self, spec_year: int, 
+
+#     def build_segment_analysis(self, segments: Dict[str, Any]) -> str:
+#         if not segments:
+#             return ""
+        
+#         rows_html = ""
+#         order = [
+#             ("Peak (18-23)", "peak"),
+#             ("Solar (08-18)", "solar"), 
+#             ("Off-Peak (Rest)", "off_peak")
+#         ]
+        
+#         has_data = False
+#         for label, key in order:
+#             data = segments.get(key)
+#             if data and data.get('count', 0) > 0:
+#                 has_data = True
+#                 price = data['twap']
+#                 vol = data['volume_gwh']
+#                 rows_html += (
+# f'<tr style="border-bottom: 1px solid #f1f5f9;">'
+# f'<td style="padding: 12px 16px; font-weight: 600; color: #0f172a;">{label}</td>'
+# f'<td style="padding: 12px 16px; text-align: right;">₹{price:.4f}</td>'
+# f'<td style="padding: 12px 16px; text-align: right;">{vol:.2f}</td>'
+# f'</tr>'
+#                 )
+        
+#         if not has_data:
+#             return ""
+            
+#         return (
+# f'<div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">'
+# f'<div style="padding: 16px; border-bottom: 1px solid #e2e8f0;">'
+# f'<h3 style="margin: 0; font-size: 1rem; color: #0f172a;">🕒 Segment Analysis</h3>'
+# f'</div>'
+# f'<table style="width: 100%; border-collapse: collapse;">'
+# f'<thead style="background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase;">'
+# f'<tr>'
+# f'<th style="padding: 10px 16px; text-align: left;">Segment</th>'
+# f'<th style="padding: 10px 16px; text-align: right;">Price (₹/kWh)</th>'
+# f'<th style="padding: 10px 16px; text-align: right;">Volume (GWh)</th>'
+# f'</tr>'
+# f'</thead>'
+# f'<tbody>'
+# f'{rows_html}'
+# f'</tbody>'
+# f'</table>'
+# f'</div>'
+#         )
+
+    # presenters/enhanced_response_builder.py - UPDATE build_market_comparison_section METHOD
+
+    def build_market_comparison_section(
+        self, 
+        spec_year: int, 
         current_year_data: Dict[str, Dict[str, Any]], 
-        previous_year_data: Dict[str, Optional[Dict[str, Any]]]) -> str:
+        previous_year_data: Dict[str, Any],
+        current_date_range: str = None,  # NEW PARAMETER
+        current_time_window: str = None   # NEW PARAMETER
+    ) -> str:
+        """
+        Build market comparison with detailed date and time information.
+        """
         prev_year = spec_year - 1
-        rows = ["| **Market** | **Volume (GWh)** | **Volume Prev** | **Price (₹/kWh)** | **Price Prev** | **YoY %** |"]
-        rows.append("|-----------|-----------------|-----------------|------------------|----------------|---------|")
+        rows_html = ""
+        
+        # Build descriptive comparison label
+        comparison_label = f"{spec_year} vs {prev_year}"
+        if current_date_range and current_time_window:
+            comparison_label = f"{current_date_range} • {current_time_window}"
+            comparison_subtitle = f"Comparing {spec_year} vs {prev_year} (Same Period)"
+        elif current_date_range:
+            comparison_subtitle = f"{current_date_range} • {spec_year} vs {prev_year}"
+        else:
+            comparison_subtitle = f"Volume (GWh) & Price (₹/kWh)"
+        
         for market in ["DAM", "GDAM", "RTM"]:
             curr = current_year_data.get(market, {})
             prev = (previous_year_data.get(market) or {}) if previous_year_data else {}
+            
             v_curr = curr.get('total_volume_gwh', 0.0)
-            v_prev = prev.get('total_volume_gwh', 0.0) if prev else 0.0
+            v_prev = prev.get('total_volume_gwh', 0.0)
             p_curr = curr.get('twap', 0.0)
-            p_prev = prev.get('twap', 0.0) if prev else 0.0
-            yoy = ((p_curr - p_prev) / p_prev * 100) if p_prev > 0 else 0.0
-            change_str = f"📈 +{yoy:.1f}%" if yoy > 0 else f"📉 {yoy:.1f}%"
-            rows.append(f"| {market} | {v_curr:.2f} | {v_prev:.2f} | ₹{p_curr:.4f} | ₹{p_prev:.4f} | {change_str} |")
-        return f"""## 📊 Volumes (GWh) and Average Prices (₹/kWh)
+            p_prev = prev.get('twap', 0.0)
+            
+            yoy_val = ((p_curr - p_prev) / p_prev * 100) if p_prev > 0 else 0.0
+            yoy_chip = self._format_yoy_chip(yoy_val)
+            
+            market_color = "#0056D2" if market == "DAM" else ("#10b981" if market == "GDAM" else "#f59e0b")
+            market_badge = f'<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:{market_color}; margin-right:8px;"></span>{market}'
+            
+            # Show prev year label dynamically
+            prev_label = f"{prev_year}" if current_date_range else "prev"
+            
+            rows_html += (
+f'<tr style="border-bottom: 1px solid #f1f5f9;">'\
+f'<td style="padding: 16px; font-weight: 600;">{market_badge}</td>'\
+f'<td style="padding: 16px; text-align: right;">'\
+f'<div style="font-weight: 500;">{v_curr:,.1f} GWh</div>'\
+f'<div style="font-size: 0.75rem; color: #94a3b8;">{v_prev:,.1f} ({prev_label})</div>'\
+f'</td>'\
+f'<td style="padding: 16px; text-align: right;">'\
+f'<div style="font-weight: 600; color: #0f172a;">₹{p_curr:.3f}</div>'\
+f'<div style="font-size: 0.75rem; color: #94a3b8;">₹{p_prev:.3f} ({prev_label})</div>'\
+f'</td>'\
+f'<td style="padding: 16px; text-align: right;">{yoy_chip}</td>'\
+f'</tr>'
+        )
+    
+        return (
+f'<div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">'\
+f'<div style="padding: 16px; border-bottom: 1px solid #e2e8f0;">'\
+f'<h3 style="margin: 0; font-size: 1rem; color: #0f172a;">📊 Market Comparison</h3>'\
+f'<div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">{comparison_subtitle}</div>'\
+f'</div>'\
+f'<table style="width: 100%; border-collapse: collapse;">'\
+f'<thead style="background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase;">'\
+f'<tr>'\
+f'<th style="padding: 10px 16px; text-align: left;">Market</th>'\
+f'<th style="padding: 10px 16px; text-align: right;">Volume</th>'\
+f'<th style="padding: 10px 16px; text-align: right;">Price</th>'\
+f'<th style="padding: 10px 16px; text-align: right;">YoY Δ</th>'\
+f'</tr>'\
+f'</thead>'\
+f'<tbody>'\
+f'{rows_html}'\
+f'</tbody>'\
+f'</table>'\
+f'</div>'
+    )
 
-### Market Comparison: {spec_year} vs {prev_year}
-
-{chr(10).join(rows)}
-"""
-
-    def build_bid_analysis_section(self, all_market_data: Dict[str, Dict[str, Any]]) -> str:
-        rows = ["| **Market** | **Buy Bid (MW)** | **Sell Bid (MW)** | **Scheduled (MW)** | **B/S Ratio** |"]
-        rows.append("|-----------|-----------------|------------------|-------------------|--------------|")
-        ratios = []
-        for market in ["DAM", "GDAM", "RTM"]:
-            data = all_market_data.get(market, {})
-            buy = data.get('purchase_bid_total_mw', 0.0)
-            sell = data.get('sell_bid_total_mw', 0.0)
-            scheduled = data.get('scheduled_total_mw', 0.0)
-            ratio = buy / sell if sell > 0 else 0.0
-            ratios.append(ratio)
-            rows.append(f"| {market} | {buy:>15,.0f} | {sell:>18,.0f} | {scheduled:>19,.0f} | {ratio:>12.2f} |")
-        avg_ratio = sum(ratios) / len(ratios) if ratios else 0.0
-        status = "🔴 Demand Heavy" if avg_ratio > 1.2 else "🟢 Balanced" if avg_ratio > 0.8 else "🔵 Supply Heavy"
-        return f"""## 📋 Market Bids & Scheduling
-
-{chr(10).join(rows)}
-
-**Status:** {status}
-"""
 
     def build_ai_insights_section(self, insights: List[str]) -> str:
-        if not insights or len(insights) == 0:
-            return ""
-        bullets = "\n".join(f"- {i}" for i in insights)
-        return f"""## 🤖 AI-Powered Insights
-
-{bullets}
-
----
-"""
+        if not insights: return ""
+        
+        lis = "".join([f'<li style="margin-bottom: 8px; position: relative; padding-left: 20px;"><span style="position: absolute; left: 0; color: #00BCE4;">•</span> {i}</li>' for i in insights])
+        
+        return (
+f'<div style="background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); border-radius: 12px; padding: 20px; border: 1px solid #dbeafe;">'
+f'<h3 style="margin: 0 0 12px 0; color: #1e40af; font-size: 1rem; display: flex; align-items: center; gap: 8px;">'
+f'🤖 AI Insights'
+f'</h3>'
+f'<ul style="margin: 0; padding: 0; list-style: none; font-size: 0.95rem; color: #334155;">'
+f'{lis}'
+f'</ul>'
+f'</div>'
+        )
 
     def compose_dashboard(self, sections: List[str]) -> str:
-        valid = [s for s in sections if s and len(s.strip()) > 0]
-        return "\n\n".join(valid)
+        return "\n\n".join([s for s in sections if s and len(s.strip()) > 0])

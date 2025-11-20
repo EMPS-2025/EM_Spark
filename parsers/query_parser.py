@@ -5,15 +5,116 @@ Supports flexible natural language input.
 """
 
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 from datetime import date
 from dataclasses import dataclass
 
 from parsers.date_parser import DateParser
 from parsers.time_parser import TimeParser
-from parsers.llm_parser import LLMParser
+#from parsers.llm_parser import LLMParser
 from core.models import QuerySpec
 from utils.text_utils import normalize_text
+
+
+# ════════════════════════════════════════════════════════════════════════
+# NEW: Day Exclusion Support
+# ════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class QueryExclusion:
+    """Represents day exclusions in a query."""
+    excluded_days: Set[int]  # 0=Monday, 6=Sunday (Python weekday())
+    exclusion_text: str      # Original exclusion text
+    
+    @staticmethod
+    def parse(query: str) -> Optional['QueryExclusion']:
+        """
+        Parse exclusion clauses from query.
+        
+        Examples:
+            - "excluding Sunday" -> {6}
+            - "except weekends" -> {5, 6}
+            - "without Monday and Friday" -> {0, 4}
+        """
+        query_lower = query.lower()
+        
+        # Check for exclusion keywords
+        exclusion_keywords = [
+            'excluding', 'except', 'without', 
+            'skip', 'ignore', 'not including', 'exclude'
+        ]
+        
+        exclusion_start = -1
+        keyword_used = None
+        
+        for keyword in exclusion_keywords:
+            if keyword in query_lower:
+                exclusion_start = query_lower.find(keyword)
+                keyword_used = keyword
+                break
+        
+        if exclusion_start == -1:
+            return None
+        
+        # Extract exclusion clause (everything after keyword)
+        exclusion_clause = query[exclusion_start + len(keyword_used):].strip()
+        
+        # Map day names to weekday numbers
+        day_mapping = {
+            'monday': 0, 'mon': 0,
+            'tuesday': 1, 'tue': 1, 'tues': 1,
+            'wednesday': 2, 'wed': 2,
+            'thursday': 3, 'thu': 3, 'thur': 3, 'thurs': 3,
+            'friday': 4, 'fri': 4,
+            'saturday': 5, 'sat': 5,
+            'sunday': 6, 'sun': 6
+        }
+        
+        # Special case: weekends
+        weekend_keywords = ['weekend', 'weekends', 'sat and sun', 'saturday and sunday']
+        for weekend_kw in weekend_keywords:
+            if weekend_kw in exclusion_clause.lower():
+                return QueryExclusion(
+                    excluded_days={5, 6},
+                    exclusion_text=exclusion_clause
+                )
+        
+        # Special case: weekdays
+        weekday_keywords = ['weekday', 'weekdays', 'working days']
+        for weekday_kw in weekday_keywords:
+            if weekday_kw in exclusion_clause.lower():
+                return QueryExclusion(
+                    excluded_days={0, 1, 2, 3, 4},
+                    exclusion_text=exclusion_clause
+                )
+        
+        # Parse individual day names
+        excluded_days = set()
+        words = exclusion_clause.lower().replace(',', ' ').split()
+        
+        for word in words:
+            # Remove 's' from plural (Sundays -> Sunday)
+            word_singular = word.rstrip('s')
+            
+            if word_singular in day_mapping:
+                excluded_days.add(day_mapping[word_singular])
+        
+        if excluded_days:
+            return QueryExclusion(
+                excluded_days=excluded_days,
+                exclusion_text=exclusion_clause
+            )
+        
+        return None
+    
+    def should_exclude_date(self, check_date: date) -> bool:
+        """Check if a specific date should be excluded."""
+        return check_date.weekday() in self.excluded_days
+    
+    def get_excluded_day_names(self) -> List[str]:
+        """Get human-readable names of excluded days."""
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        return [day_names[day] for day in sorted(self.excluded_days)]
 
 
 class QueryParser:

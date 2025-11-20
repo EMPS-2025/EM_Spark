@@ -11,6 +11,7 @@ from core.models import QuerySpec
 from parsers.date_parser import DateParser
 from parsers.time_parser import TimeParser
 from utils.text_utils import normalize_text
+from .query_parser import QueryExclusion
 
 class BulletproofParser:
     """High-confidence parser with layered deterministic fallbacks."""
@@ -29,6 +30,17 @@ class BulletproofParser:
 
         if not query or not query.strip():
             return [self._default_spec()]
+        
+        exclusion = QueryExclusion.parse(query)
+
+        # Remove exclusion clause from query for normal parsing
+        clean_query = query
+        if exclusion:
+            for keyword in ['excluding', 'except', 'without', 'skip', 'ignore', 'not including', 'exclude']:
+                if keyword in query.lower():
+                    idx = query.lower().find(keyword)
+                    clean_query = query[:idx].strip()
+                    break
 
         normalized = normalize_text(query)
         markets = self._extract_markets(normalized)
@@ -54,6 +66,7 @@ class BulletproofParser:
                             hours=group.get("hours"),
                             slots=group.get("slots"),
                             stat=stat,
+                            exclusion=exclusion
                         )
                     )
 

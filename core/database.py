@@ -1,47 +1,13 @@
-# core/database.py - FIXED with correct field names
-"""Database connection management with proper bid/ask field handling."""
+# core/database.py
+"""
+Database Manager
+Handles strict mapping between SQL RPC results and Python dicts.
+"""
 import os
 import psycopg2
 import psycopg2.extras
 from typing import List, Dict, Optional
 from datetime import date
-
-BID_FIELD_KEYWORDS = ("purchase_bid", "sell_bid", "buy_bid", "sell_offer")
-
-
-def _as_float(value):
-    """Best-effort conversion for text columns (e.g. *_txt)."""
-    if value is None:
-        return 0.0
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        cleaned = value.strip()
-        if not cleaned:
-            return 0.0
-        for token in (",", "₹", "rs", "RS", "Rs", "MW", "mw", "kWh", "MWh"):
-            cleaned = cleaned.replace(token, "")
-        try:
-            return float(cleaned)
-        except ValueError:
-            return 0.0
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _coerce_bid_fields(row: Dict) -> None:
-    """Ensure any bid/offer related fields are safe floats."""
-    for key, value in list(row.items()):
-        key_lower = str(key).lower()
-        if not any(token in key_lower for token in BID_FIELD_KEYWORDS):
-            continue
-        try:
-            row[key] = _as_float(value)
-        except (TypeError, ValueError):
-            row[key] = 0.0
-
 
 class DatabaseManager:
     """Manages database connections and queries."""
@@ -54,9 +20,18 @@ class DatabaseManager:
     
     def _connect(self):
         return psycopg2.connect(self.dsn, sslmode="require")
-    
+
+    def _safe_float(self, val) -> float:
+        """Safely convert Decimal/String/Int to float, defaulting to 0.0."""
+        if val is None:
+            return 0.0
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return 0.0
+
     # ═══════════════════════════════════════════════════════════
-    # DAM/GDAM/RTM Queries - FIXED
+    # CORE MARKET FETCH (DAM/GDAM/RTM)
     # ═══════════════════════════════════════════════════════════
     
     def fetch_hourly(
@@ -65,150 +40,149 @@ class DatabaseManager:
         start_date: date,
         end_date: date,
         block_start: Optional[int] = None,
-        block_end: Optional[int] = None
+        block_end: Optional[int] = None,
+        exclusion = None
     ) -> List[Dict]:
-        """Fetch hourly price data with correct aggregations."""
+        """
+        Fetch hourly aggregated data.
+        RPC Return: price_avg_rs_per_mwh, scheduled_mw_sum, purchase_bid_avg_mw, sell_bid_avg_mw, mcv_sum_mw
+        """
         with self._connect() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
                 if block_start and block_end:
-                    cur.execute(
-                        """
-                        SELECT * FROM public.rpc_get_hourly_prices_range(%s,%s,%s,%s,%s);
-                        """,
-                        (market, start_date, end_date, block_start, block_end)
-                    )
+                    query = "SELECT * FROM public.rpc_get_hourly_prices_range(%s,%s,%s,%s,%s);"
+                    params = (market, start_date, end_date, block_start, block_end)
                 else:
-                    cur.execute(
-                        """
-                        SELECT * FROM public.rpc_get_hourly_prices_range(%s,%s,%s,NULL,NULL);
-                        """,
-                        (market, start_date, end_date)
-                    )
+                    query = "SELECT * FROM public.rpc_get_hourly_prices_range(%s,%s,%s,NULL,NULL);"
+                    params = (market, start_date, end_date)
                 
+                cur.execute(query, params)
                 rows = [dict(r) for r in cur.fetchall()]
+
                 
-                # DEBUG: Print first row to verify fields
-                if rows:
-                    print(f"✓ Fetched {len(rows)} hourly rows for {market}")
-                    print(f"  Sample: Price={rows[0].get('price_avg_rs_per_mwh')}, "
-                          f"Scheduled={rows[0].get('scheduled_mw_sum')}, "
-                          f"PurchaseBid={rows[0].get('purchase_bid_avg')}, "
-                          f"SellBid={rows[0].get('sell_bid_avg')}")
-                    bid_keys = [
-                        str(k)
-                        for k in rows[0].keys()
-                        if any(token in str(k).lower() for token in BID_FIELD_KEYWORDS)
-                    ]
-                    if bid_keys:
-                        print(f"  Bid fields present: {', '.join(sorted(bid_keys))}")
-                else:
-                    print(f"⚠️  No hourly data found for {market} on {start_date}")
                 
-                # Ensure numeric fields with correct names
-                for row in rows:
-                    row['price_avg_rs_per_mwh'] = _as_float(
-                        row.get('price_avg_rs_per_mwh', row.get('mcp_rs_per_mwh', 0))
-                    )
-                    row['scheduled_mw_sum'] = _as_float(
-                        row.get('scheduled_mw_sum', row.get('scheduled_mw_txt', row.get('scheduled_mw', 0)))
-                    )
-                    row['duration_min'] = int(row.get('duration_min', 60) or 60)
-                    row['purchase_bid_avg'] = _as_float(row.get('purchase_bid_avg'))
-                    row['sell_bid_avg'] = _as_float(row.get('sell_bid_avg'))
-                    row['mcv_sum'] = _as_float(row.get('mcv_sum', row.get('mcv_txt', 0)))
-                    for alias in ('purchase_bid_txt', 'sell_bid_txt', 'mcv_txt'):
-                        if alias in row:
-                            row[alias] = _as_float(row[alias])
-                    _coerce_bid_fields(row)
+                # Normalize keys for the app
+                cleaned_rows = []
+                for r in rows:
+                    delivery_date = r.get('delivery_date')
+                    
+                    # ✅ NEW: Check exclusion
+                    if exclusion and delivery_date:
+                        if exclusion.should_exclude_date(delivery_date):
+                            continue  # Skip this row
+                    
+                    cleaned_rows.append({
+                        'delivery_date': delivery_date,
+                        'block_index': r.get('block_index'),
+                        'price_avg': self._safe_float(r.get('price_avg_rs_per_mwh')),
+                        'scheduled_mw': self._safe_float(r.get('scheduled_mw_sum')),
+                        'purchase_bid_mw': self._safe_float(r.get('purchase_bid_avg_mw')),
+                        'sell_bid_mw': self._safe_float(r.get('sell_bid_avg_mw')),
+                        'mcv_mw': self._safe_float(r.get('mcv_sum_mw')),
+                        'duration_min': 60
+                    })
                 
-                return rows
-    
+                return cleaned_rows
+
     def fetch_quarter(
         self,
         market: str,
         start_date: date,
         end_date: date,
         slot_start: Optional[int] = None,
-        slot_end: Optional[int] = None
+        slot_end: Optional[int] = None,
+        exclusion = None 
     ) -> List[Dict]:
-        """Fetch 15-minute slot price data."""
+        """
+        Fetch 15-min slot data.
+        RPC Return: price_rs_per_mwh, scheduled_mw, purchase_bid_mw, sell_bid_mw, mcv_mw
+        """
         with self._connect() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
                 if slot_start and slot_end:
-                    cur.execute(
-                        """
-                        SELECT * FROM public.rpc_get_quarter_prices_range(%s,%s,%s,%s,%s);
-                        """,
-                        (market, start_date, end_date, slot_start, slot_end)
-                    )
+                    query = "SELECT * FROM public.rpc_get_quarter_prices_range(%s,%s,%s,%s,%s);"
+                    params = (market, start_date, end_date, slot_start, slot_end)
                 else:
-                    cur.execute(
-                        """
-                        SELECT * FROM public.rpc_get_quarter_prices_range(%s,%s,%s,NULL,NULL);
-                        """,
-                        (market, start_date, end_date)
-                    )
-                
-                rows = [dict(r) for r in cur.fetchall()]
-                
-                # DEBUG
-                if rows:
-                    print(f"✓ Fetched {len(rows)} quarter rows for {market}")
-                else:
-                    print(f"⚠️  No quarter data found for {market} on {start_date}")
-                
-                # Ensure numeric fields
-                for row in rows:
-                    row['price_rs_per_mwh'] = _as_float(
-                        row.get('price_rs_per_mwh', row.get('mcp_rs_per_mwh', 0))
-                    )
-                    row['scheduled_mw'] = _as_float(row.get('scheduled_mw', row.get('scheduled_mw_txt', 0)))
-                    row['duration_min'] = int(row.get('duration_min', 15) or 15)
-                    row['purchase_bid'] = _as_float(row.get('purchase_bid', row.get('purchase_bid_txt', 0)))
-                    row['sell_bid'] = _as_float(row.get('sell_bid', row.get('sell_bid_txt', 0)))
-                    row['mcv'] = _as_float(row.get('mcv', row.get('mcv_txt', 0)))
-                    _coerce_bid_fields(row)
-                
-                return rows
-            
-    def fetch_derivative_data(self, trading_date: date) -> List[Dict]:
-        """Fetch derivative market data"""
-        try:
-            rows = self.fetch_deriv_daily_fallback(trading_date, exchange)
-            return rows if rows else []
-        except Exception as e:
-            print(f"Error fetching derivative data: {e}")
-            return []
+                    query = "SELECT * FROM public.rpc_get_quarter_prices_range(%s,%s,%s,NULL,NULL);"
+                    params = (market, start_date, end_date)
 
-    
+                cur.execute(query, params)
+                rows = [dict(r) for r in cur.fetchall()]
+
+                cleaned_rows = []
+                for r in rows:
+                    delivery_date = r.get('delivery_date')
+                    
+                    # ✅ NEW: Check exclusion
+                    if exclusion and delivery_date:
+                        if exclusion.should_exclude_date(delivery_date):
+                            continue
+                    
+                    cleaned_rows.append({
+                        'delivery_date': delivery_date,
+                        'slot_index': r.get('slot_index'),
+                        'price_avg': self._safe_float(r.get('price_rs_per_mwh')),
+                        'scheduled_mw': self._safe_float(r.get('scheduled_mw')),
+                        'purchase_bid_mw': self._safe_float(r.get('purchase_bid_mw')),
+                        'sell_bid_mw': self._safe_float(r.get('sell_bid_mw')),
+                        'mcv_mw': self._safe_float(r.get('mcv_mw')),
+                        'duration_min': 15
+                    })
+                
+                return cleaned_rows
+
     # ═══════════════════════════════════════════════════════════
-    # Derivative Queries
+    # DERIVATIVES
     # ═══════════════════════════════════════════════════════════
-    
-    def fetch_deriv_daily_fallback(
-        self,
-        target_day: date,
-        exchange: Optional[str] = None
-    ) -> List[Dict]:
-        """Fetch derivative daily close with fallback."""
-        with self._connect() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute(
-                    "SELECT * FROM public.rpc_deriv_daily_with_fallback(%s,%s);",
-                    (exchange, target_day)
-                )
-                return [dict(r) for r in cur.fetchall()]
-    
-    def fetch_deriv_month_expiry(
-        self,
-        contract_month_first: date,
-        exchange: Optional[str] = None
-    ) -> List[Dict]:
-        """Fetch derivative expiry data."""
-        with self._connect() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute(
-                    "SELECT * FROM public.rpc_deriv_expiry_for_month(%s,%s);",
-                    (exchange, contract_month_first)
-                )
-                return [dict(r) for r in cur.fetchall()]
+
+    # core/database.py - UPDATE fetch_derivative_data METHOD
+
+    def fetch_derivative_data(self, trading_date: date) -> tuple[List[Dict], Optional[date]]:
+        """
+        Fetch derivative market data (fallback to nearest date).
+        Returns: (data_rows, actual_trading_date)
+        """
+        from datetime import datetime, timedelta
+        
+        try:
+            with self._connect() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+                    # First check if derivative market exists for this date
+                    cur.execute(
+                        "SELECT * FROM public.rpc_deriv_daily_with_fallback(%s, %s);",
+                        (None, trading_date)
+                    )
+                    
+                    rows = [dict(r) for r in cur.fetchall()]
+                    
+                    if not rows:
+                        # Check if derivative market started (July 2025)
+                        deriv_start_date = datetime(2025, 7, 1).date()
+                        if trading_date < deriv_start_date:
+                            return ([], None)  # Market didn't exist yet
+                        else:
+                            # Market exists but closed on this day - find most recent trading day
+                            for days_back in range(1, 15):  # Look back up to 2 weeks
+                                fallback_date = trading_date - timedelta(days=days_back)
+                                if fallback_date < deriv_start_date:
+                                    return ([], None)
+                                
+                                cur.execute(
+                                    "SELECT * FROM public.rpc_deriv_daily_with_fallback(%s, %s);",
+                                    (None, fallback_date)
+                                )
+                                fallback_rows = [dict(r) for r in cur.fetchall()]
+                                if fallback_rows:
+                                    # Get actual trading date from first row
+                                    actual_date = fallback_rows[0].get('trading_date', fallback_date)
+                                    return (fallback_rows, actual_date)
+                            
+                            return ([], None)  # No data found
+                    else:
+                        # Get actual trading date from data
+                        actual_date = rows[0].get('trading_date', trading_date)
+                        return (rows, actual_date)
+        
+        except Exception as e:
+            print(f"⚠️ Error fetching derivatives: {e}")
+            return ([], None)

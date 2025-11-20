@@ -18,10 +18,6 @@ class TimeParser:
         """
         Parse explicit time groups from text.
         Returns list of dicts with 'granularity', 'hours', and 'slots' keys.
-        
-        Examples:
-            "6-8 and 12-14" → [{"granularity": "hour", "hours": [6,7,8,12,13,14], "slots": None}]
-            "20-50 slots" → [{"granularity": "quarter", "hours": None, "slots": [20..50]}]
         """
         lower = text.lower()
         
@@ -39,6 +35,7 @@ class TimeParser:
             slot_groups.extend(time_ranges["slots"])
         
         # 2. Parse "H to H hrs/hours"
+        # These are explicit hour requests (e.g., "6-8 hrs" -> 06:00 to 08:00 -> Blocks 7,8)
         hour_ranges = self._parse_hour_ranges(lower)
         if hour_ranges:
             hours_groups.extend(hour_ranges)
@@ -49,12 +46,32 @@ class TimeParser:
             slot_groups.extend(slot_ranges)
         
         # 4. Parse plain numeric ranges (6-8, 20-50, etc.)
+        # CRITICAL FIX: Do NOT match if it looks like it was already caught by "hrs" regex
+        # We use a negative lookahead in the regex itself, but here we just append if valid.
         numeric_ranges = self._parse_plain_numeric_ranges(lower)
         if numeric_ranges:
-            # Determine if these are hours or slots based on magnitude
             for start, end in numeric_ranges:
+                # If explicit "hours" were found elsewhere in text, be careful with plain numbers
+                # But usually, we assume plain numbers <= 24 are hours if not specified
                 if end <= 24 and not prefer_quarter:
-                    hours_groups.append((start, end))
+                    # Convert plain numbers to 1-based blocks
+                    # If user says "6-8" (meaning time), treat as 06:00-08:00 -> Blocks 7, 8
+                    # Logic: Start 6 means 06:00 (Block 7). End 8 means 08:00 (Block 8).
+                    # This is different from "Block 6 to Block 8".
+                    # We assume "Time" semantics for plain small numbers.
+                    
+                    # However, existing logic was start, end.
+                    # Let's align with "6-8 hrs" logic -> 06:00 to 08:00
+                    # Block for 06:00 is 7. Block for 08:00 is 9 (exclusive) -> 8 (inclusive).
+                    # So range is 7 to 8.
+                    
+                    # Previous logic (start, end) for 6-8 was 6,8 -> 6,7,8.
+                    # We change this to match "Time" semantics: 
+                    # Start H -> Block H+1. End H -> Block H.
+                    s_block = start + 1
+                    e_block = end
+                    if e_block >= s_block:
+                        hours_groups.append((s_block, e_block))
                 else:
                     slot_groups.append((start, end))
         
@@ -84,7 +101,6 @@ class TimeParser:
         # Prefer hour or quarter based on hints
         if result:
             if prefer_quarter and len(result) > 1:
-                # Keep only quarter if explicitly requested
                 result = [r for r in result if r["granularity"] == "quarter"]
             elif prefer_hour and len(result) > 1:
                 result = [r for r in result if r["granularity"] == "hour"]
@@ -115,6 +131,7 @@ class TimeParser:
             H2 = self._to_24hour(h2, a2)
             
             # Hour blocks (1-24)
+            # 06:00 -> Block 7. 08:00 -> End of Block 8.
             start_block = min(24, H1 + 1 + (1 if m1 > 0 else 0))
             end_block = min(24, H2 + (0 if m2 == 0 else 1))
             if m2 == 0:
@@ -146,6 +163,7 @@ class TimeParser:
             h1 = max(0, min(23, int(m.group(1))))
             h2 = max(0, min(24, int(m.group(2))))
             
+            # Logic: "6-8 hrs" -> 06:00 to 08:00 -> Blocks 7, 8
             start_block = min(24, h1 + 1)
             end_block = 24 if h2 == 24 else max(1, min(24, h2))
             
@@ -169,20 +187,20 @@ class TimeParser:
         return groups
     
     def _parse_plain_numeric_ranges(self, text: str) -> List[tuple]:
-        """Parse plain 'N-M' or 'N to M' patterns."""
+        """Parse plain 'N-M' or 'N to M' patterns, avoiding if 'hrs' follows."""
         # Remove dates first
         clean = text
         clean = re.sub(r'\b\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}\b', ' ', clean, flags=re.I)
         clean = re.sub(r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b', ' ', clean)
         
-        pattern = re.compile(r'\b(\d{1,2})\s*(?:to|-)\s*(\d{1,2})\b', re.I)
+        # Regex now negative lookahead for "hrs" or "hours" or "slots" to avoid double counting
+        pattern = re.compile(r'\b(\d{1,2})\s*(?:to|-)\s*(\d{1,2})\b(?!\s*(?:hours?|hrs?|blocks?|slots?))', re.I)
         groups = []
         
         for m in pattern.finditer(clean):
             a, b = int(m.group(1)), int(m.group(2))
             lo, hi = sorted((a, b))
             
-            # Sanity check: must be reasonable time values
             if 1 <= lo <= 96 and 1 <= hi <= 96:
                 groups.append((lo, hi))
         

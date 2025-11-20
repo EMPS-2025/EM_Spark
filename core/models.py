@@ -4,6 +4,7 @@
 from dataclasses import dataclass
 from datetime import date
 from typing import List, Optional
+#from parsers.query_parser import QueryExclusion
 
 
 @dataclass
@@ -18,6 +19,7 @@ class QuerySpec:
     stat: str                       # 'list', 'twap', 'vwap', 'daily_avg'
     area: str = "ALL"
     auto_added: bool = False
+    exclusion: Optional['QueryExclusion'] = None
     
     def __repr__(self):
         time_range = f"hours={self.hours}" if self.hours else f"slots={self.slots}"
