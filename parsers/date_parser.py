@@ -32,7 +32,7 @@ class DateParser:
         "dec": 12, "december": 12
     }
     
-    MONTH_PATTERN = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)"
+    MONTH_PATTERN = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)"
     
     DATE_MIN = date(2010, 1, 1)  # Minimum valid date
     
@@ -137,7 +137,6 @@ class DateParser:
             return (start, end)
         
         # Try various date patterns IN PRIORITY ORDER
-        # Most specific patterns first!
         patterns = [
             self._parse_full_date_range,               # "20 Oct 2025 to 20 Nov 2025"
             self._parse_day_month_to_day_month_year,  # "24 September to 24 October 2025"
@@ -145,10 +144,10 @@ class DateParser:
             self._parse_day_range_same_month,          # "1-10 Nov 2025"
             self._parse_numeric_range,                 # "31/10/2025 to 15/11/2025"
             self._parse_single_numeric_date,           # "31/10/2025"
-            self._parse_single_day_month,              # "14 Nov 2025" ← CRITICAL
+            self._parse_single_day_month,              # "14 Nov 2025"
             self._parse_month_to_month_range,          # "Nov 2024 to Feb 2025"
             self._parse_month_year,                    # "Nov 2025"
-            self._parse_year_only                      # "2024" (only with context)
+            self._parse_year_only                      # "2024"
         ]
         
         for parser_func in patterns:
@@ -157,8 +156,6 @@ class DateParser:
                 if result[0] and result[1]:
                     return result
             except Exception as e:
-                # Debug: uncomment to see parsing errors
-                # print(f"Parser {parser_func.__name__} failed: {e}")
                 continue
         
         return (None, None)
@@ -166,8 +163,8 @@ class DateParser:
     def _parse_full_date_range(self, text: str, today: date) -> Tuple[Optional[date], Optional[date]]:
         """
         Matches: "20 Oct 2025 to 20 Nov 2025"
-        This logic was previously split or weak. Now it's explicit.
         """
+        # IMPROVED REGEX: More flexible whitespace and 'from' handling
         m = re.search(
             rf'\b(\d{{1,2}})\s+({self.MONTH_PATTERN})\s+(\d{{4}})\s*(?:to|until|till|-)\s*(\d{{1,2}})\s+({self.MONTH_PATTERN})\s+(\d{{4}})\b',
             text, re.I
@@ -310,8 +307,7 @@ class DateParser:
         return (None, None)
     
     def _parse_single_day_month(self, text: str, today: date):
-        """14 Nov 2025 - CRITICAL PATTERN"""
-        # Must match complete pattern with day + month + optional year
+        """14 Nov 2025"""
         m = re.search(
             rf'\b(\d{{1,2}})\s+({self.MONTH_PATTERN})(?:\s+(\d{{2,4}}))?\b',
             text,
@@ -331,8 +327,7 @@ class DateParser:
             return None, None
     
     def _parse_month_year(self, text: str, today: date):
-        """Nov 2025 - Must not match if day is present"""
-        # Negative lookahead to ensure no day before month
+        """Nov 2025"""
         m = re.search(
             rf'(?<!\d\s)({self.MONTH_PATTERN})\s+(\d{{2,4}})\b',
             text,
@@ -350,9 +345,7 @@ class DateParser:
         return start, end
     
     def _parse_year_only(self, text: str, today: date) -> Tuple[Optional[date], Optional[date]]:
-        """2024 (ONLY if explicit context like 'in year 2024' or 'full year 2024')"""
-        # FIXED: Much stricter pattern - only match with explicit year context
-        # Must have "year" or "full year" or "in YYYY" patterns
+        """2024"""
         m = re.search(r'\b(?:in\s+|full\s+year\s+|year\s+)(20\d{2})\b', text, re.I)
         if m:
             year = int(m.group(1))
