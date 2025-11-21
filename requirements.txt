@@ -19,7 +19,7 @@ dateparser==1.2.0
 python-dateutil==2.8.2
 
 # Optional: Enhanced Features
-asyncpg==0.29.0            # For async database operations
+asyncpg>=0.30.0           # For async database operations
 pandas>=2.2.3             # For data analysis
 plotly==5.18.0            # For charts and visualizations
 fastapi
