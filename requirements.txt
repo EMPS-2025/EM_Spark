@@ -20,7 +20,7 @@ python-dateutil==2.8.2
 
 # Optional: Enhanced Features
 asyncpg==0.29.0            # For async database operations
-pandas==2.1.4             # For data analysis
+pandas>=2.2.3             # For data analysis
 plotly==5.18.0            # For charts and visualizations
 fastapi
 uvicorn
