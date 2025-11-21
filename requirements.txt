@@ -28,4 +28,4 @@ jinja2
 aiofiles
 asyncio
 
-pydantic==1.10.15
+pydantic>=2.9.0
