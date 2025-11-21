@@ -139,6 +139,7 @@ class DateParser:
         # Try various date patterns IN PRIORITY ORDER
         # Most specific patterns first!
         patterns = [
+            self._parse_full_date_range,               # "20 Oct 2025 to 20 Nov 2025"
             self._parse_day_month_to_day_month_year,  # "24 September to 24 October 2025"
             self._parse_day_month_year_range,          # "24 Sep 2024 to 25 Oct 2024"
             self._parse_day_range_same_month,          # "1-10 Nov 2025"
@@ -160,6 +161,32 @@ class DateParser:
                 # print(f"Parser {parser_func.__name__} failed: {e}")
                 continue
         
+        return (None, None)
+    
+    def _parse_full_date_range(self, text: str, today: date) -> Tuple[Optional[date], Optional[date]]:
+        """
+        Matches: "20 Oct 2025 to 20 Nov 2025"
+        This logic was previously split or weak. Now it's explicit.
+        """
+        m = re.search(
+            rf'\b(\d{{1,2}})\s+({self.MONTH_PATTERN})\s+(\d{{4}})\s*(?:to|until|till|-)\s*(\d{{1,2}})\s+({self.MONTH_PATTERN})\s+(\d{{4}})\b',
+            text, re.I
+        )
+        if m:
+            d1 = int(m.group(1))
+            mon1 = self.MONTHS[m.group(2)]
+            y1 = int(m.group(3))
+            
+            d2 = int(m.group(4))
+            mon2 = self.MONTHS[m.group(5)]
+            y2 = int(m.group(6))
+            
+            start = date(y1, mon1, d1)
+            end = date(y2, mon2, d2)
+            
+            if start > end:
+                start, end = end, start
+            return (start, end)
         return (None, None)
     
     def _parse_day_month_to_day_month_year(self, text: str, today: date) -> Tuple[Optional[date], Optional[date]]:

@@ -39,25 +39,64 @@ f'</div>'
         twap: float, 
         min_price: float,  # Keep parameter for backwards compatibility
         max_price: float,  # Keep parameter for backwards compatibility
-        total_volume_gwh: float
+        total_volume_gwh: float,
+        renewable_mix_pct: float = 0.0,
+        total_market_vol: float = 0.0
     ) -> str:
         """
         Build market snapshot card - showing only Avg Price and Volume (min/max removed).
         """
+        mix_color = "#16a34a" if renewable_mix_pct > 0 else "#64748b"
+        mix_bg = "#dcfce7" if renewable_mix_pct > 0 else "#f1f5f9"
+
+        # Market Share Calc
+        share_pct = (total_volume_gwh / total_market_vol * 100) if total_market_vol > 0 else 0
+
         return (
-f'<div style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px;">'\
-f'<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px;">'\
-f'<div>'\
-f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Avg. Price</div>'\
-f'<div style="font-size: 2rem; font-weight: 700; color: #0056D2; margin-top: 8px;">₹{twap:.2f} <span style="font-size: 1rem; color: #64748b; font-weight: 400;">/kWh</span></div>'\
-f'</div>'\
-f'<div>'\
-f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Total Volume</div>'\
-f'<div style="font-size: 2rem; font-weight: 700; color: #0f172a; margin-top: 8px;">{total_volume_gwh:.1f} <span style="font-size: 1rem; color: #64748b; font-weight: 400;">GWh</span></div>'\
-f'</div>'\
-f'</div>'\
+f'<div style="background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px;">'
+    
+    f'<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px;">'
+        
+        # 1. PRICE BLOCK
+        f'<div style="display: flex; flex-direction: column;">'
+            f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">Market Clearing Price</div>'
+            f'<div style="font-size: 2.25rem; font-weight: 700; color: #0f172a; line-height: 1;">'
+                f'₹{twap:.2f}'
+                f'<span style="font-size: 1rem; color: #64748b; font-weight: 500; margin-left: 4px;">/kWh</span>'
+            f'</div>'
+            f'<div style="margin-top: 8px; display: inline-flex; align-items: center; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; width: fit-content;">'
+                f'📈 System Normal'
+            f'</div>'
+        f'</div>'
+
+        # 2. VOLUME BLOCK (SPECIFIC LABEL)
+        f'<div style="display: flex; flex-direction: column; border-left: 1px solid #f1f5f9; padding-left: 24px;">'
+            # ✅ DYNAMIC LABEL: "DAM Volume" instead of "Total Volume"
+            f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">{market} Volume</div>'
+            f'<div style="font-size: 1.75rem; font-weight: 700; color: #0f172a;">'
+                f'{total_volume_gwh:.1f} <span style="font-size: 1rem; color: #64748b;">GWh</span>'
+            f'</div>'
+            # ✅ CONTEXT: Show Market Share
+            f'<div style="font-size: 0.85rem; color: #64748b; margin-top: 4px;">'
+                f'<strong>{share_pct:.1f}%</strong> of Total Market ({total_market_vol:.1f} GWh)'
+            f'</div>'
+        f'</div>'
+
+        # 3. RENEWABLE MIX BLOCK
+        f'<div style="display: flex; flex-direction: column; background: {mix_bg}; border-radius: 12px; padding: 16px; border: 1px solid {mix_color}30;">'
+            f'<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">'
+                f'<span style="font-size: 1rem;">🌿</span>'
+                f'<div style="font-size: 0.75rem; color: {mix_color}; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Renewable Mix</div>'
+            f'</div>'
+            f'<div style="font-size: 1.75rem; font-weight: 700; color: {mix_color};">'
+                f'{renewable_mix_pct:.1f}%'
+            f'</div>'
+            f'<div style="font-size: 0.75rem; color: {mix_color}; opacity: 0.9; font-weight: 500;">Green Market Share(via GDAM Segment)</div>'
+        f'</div>'
+
+    f'</div>'
 f'</div>'
-    )
+        )
 
 
     # presenters/enhanced_response_builder.py - UPDATE build_derivative_section METHOD

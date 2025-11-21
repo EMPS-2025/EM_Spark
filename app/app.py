@@ -29,6 +29,7 @@ db = DatabaseManager(config)
 parser = BulletproofParser(config)
 response_builder = EnhancedResponseBuilder()
 
+
 @cl.on_chat_start
 async def start_session():
     welcome = """
@@ -42,7 +43,7 @@ async def start_session():
 
 Ready to analyze! 📊
     """
-    await cl.Message(content=welcome).send()
+    await cl.Message(author=config.ASSISTANT_NAME,content=welcome).send()
 
 def describe_time_selection(spec, total_specs=1) -> Dict[str, Any]:
     """Generate human-readable time labels."""
@@ -204,12 +205,13 @@ async def handle_message(msg: cl.Message):
             chart_elements = cl.user_session.get("pending_charts", [])
             if chart_elements:
                 await cl.Message(
+                    author=config.ASSISTANT_NAME,
                     content="## 📊 Market Charts\n\nInteractive visualizations generated below:",
                     elements=chart_elements
                 ).send()
                 cl.user_session.set("pending_charts", [])
             else:
-                await cl.Message(content="⚠️ No charts available. Please query market data first.").send()
+                await cl.Message(author=config.ASSISTANT_NAME, content="⚠️ No charts available. Please query market data first.").send()
             await progress_msg.remove()
             return
         
@@ -217,7 +219,7 @@ async def handle_message(msg: cl.Message):
         
         if not specs:
             await progress_msg.remove()
-            await cl.Message(content="⚠️ Could not parse query. Try: 'DAM today' or 'GDAM yesterday'").send()
+            await cl.Message(author=config.ASSISTANT_NAME, content="⚠️ Could not parse query. Try: 'DAM today' or 'GDAM yesterday'").send()
             return
 
         primary_market = specs[0].market
@@ -255,6 +257,23 @@ async def handle_message(msg: cl.Message):
                 all_market_prev_year[m] = {}
 
         primary_data = all_market_data.get(primary_market, {})
+
+        # ═══════════════════════════════════════════════════════════════
+        # 🌿 CALCULATE RENEWABLE MIX
+        # Formula: GDAM Volume / (DAM Volume + GDAM Volume)
+        # ═══════════════════════════════════════════════════════════════
+        
+        vol_dam = all_market_data.get('DAM', {}).get('total_volume_gwh', 0)
+        vol_gdam = all_market_data.get('GDAM', {}).get('total_volume_gwh', 0)
+        vol_rtm = all_market_data.get('RTM', {}).get('total_volume_gwh', 0)
+        # 1. Renewable Mix (GDAM / Spot)
+        total_market_vol = vol_dam + vol_gdam + vol_rtm
+        
+        renewable_mix_pct = 0.0
+        if total_market_vol > 0:
+            renewable_mix_pct = (vol_gdam / total_market_vol) * 100
+
+        # 2. Total Market Volume (DAM + GDAM + RTM) - NEW!
         
         # Calculate segments
         segments = calculate_segments(primary_data.get('rows', []))
@@ -301,9 +320,20 @@ async def handle_message(msg: cl.Message):
                 primary_data['rows'],
                 specs[0].granularity == 'quarter'
             )
+            # When creating each chart, add config
             if single_fig:
+                single_fig.update_layout(
+                    width=None,  # Let it be responsive
+                    autosize=True,
+                    margin=dict(l=60, r=60, t=80, b=60)
+                )
                 chart_elements.append(
-                    cl.Plotly(name=f"{primary_market} Detailed", figure=single_fig, display="inline")
+                    cl.Plotly(
+                        name=f"{primary_market}_chart", 
+                        figure=single_fig, 
+                        display="inline",
+                        size="large"  # ✅ Try this
+                    )
                 )
         
         # 3. YoY comparison chart
@@ -313,6 +343,10 @@ async def handle_message(msg: cl.Message):
                 chart_elements.append(
                     cl.Plotly(name="Year-over-Year Comparison", figure=yoy_fig, display="inline")
                 )
+        
+        
+
+        
         
         # Build date label for comparison section
         if len(specs) > 1:
@@ -341,7 +375,9 @@ async def handle_message(msg: cl.Message):
                 primary_data['twap'],
                 primary_data['min_price'],
                 primary_data['max_price'],
-                primary_data['total_volume_gwh']
+                primary_data['total_volume_gwh'],
+                renewable_mix_pct,
+                total_market_vol
             ),
             response_builder.build_derivative_section(
                 deriv_data,
@@ -374,6 +410,7 @@ async def handle_message(msg: cl.Message):
         
         await progress_msg.remove()
         await cl.Message(
+            author=config.ASSISTANT_NAME,
             content=response_text,
             actions=actions,
         ).send()
@@ -381,22 +418,52 @@ async def handle_message(msg: cl.Message):
     except Exception as e:
         traceback.print_exc()
         await progress_msg.remove()
-        await cl.Message(content=f"❌ Error: {str(e)}").send()
+        await cl.Message(author=config.ASSISTANT_NAME,content=f"❌ Error: {str(e)}").send()
 
 # Add action callback handler
+# ════════════════════════════════════════════════════════════════════════
+# ✅ REPLACE YOUR OLD on_generate_charts WITH THIS
+# ════════════════════════════════════════════════════════════════════════
+
+# app/app.py - SIMPLE WORKING VERSION
+
 @cl.action_callback("generate_charts")
 async def on_generate_charts(action: cl.Action):
-    """Handle chart generation button click"""
+    """Display charts - simple version that works"""
     charts = cl.user_session.get("pending_charts", [])
     
-    if charts:
-        # ✅ UPDATED: Better title
-        await cl.Message(
-            content="## 📊 Market Visualization\n\n Interactive charts generated below:",
-            elements=charts
-        ).send()
-        cl.user_session.set("pending_charts", [])
-    else:
-        await cl.Message(
-            content="⚠️ No charts available. Query market data first."
-        ).send()
+    if not charts:
+        await cl.Message(author=config.ASSISTANT_NAME, content="⚠️ No charts available. Query market data first.").send()
+        return
+    
+    # Send title
+    await cl.Message(author=config.ASSISTANT_NAME, content="## 📊 Market Visualization\n\n").send()
+    
+    # ✅ CRITICAL FIX: Send each chart in its own message
+    for i, chart_elem in enumerate(charts):
+        # Get the figure and force specific width
+        fig = chart_elem.figure
+        
+        # Set explicit width (not None, not 1400, but optimal for display)
+        fig.update_layout(
+            width=1000,  # Fixed width that Chainlit can handle
+            height=500,
+            autosize=False,  # Disable autosize
+            margin=dict(l=50, r=50, t=80, b=50)
+        )
+        
+        # Create new Plotly element with fixed size
+        new_chart = cl.Plotly(
+            name=f"chart_{i}",
+            figure=fig,
+            display="inline"
+        )
+        
+        # Send in separate message
+        msg = cl.Message(author=config.ASSISTANT_NAME,content="")
+        msg.elements = [new_chart]
+        await msg.send()
+    
+    # Clear charts
+    cl.user_session.set("pending_charts", [])
+

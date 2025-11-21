@@ -112,20 +112,38 @@ class BulletproofParser:
     def _extract_periods(self, text: str) -> List[Tuple[date, date]]:
         """Extract one or many date periods from the query."""
 
+        start, end = self.date_parser.parse_single_range(text)
+        if start and end:
+            return [(start, end)]
+        
+        # 2. Try multi-period lists (e.g., "Nov 2022, Nov 2023")
         periods = self.date_parser.parse_periods(text)
-        if not periods:
-            start, end = self.date_parser.parse_single_range(text)
-            if start and end:
-                periods = [(start, end)]
+        if periods:
+            return periods
+        
+        # 3. Fallback: Loose extraction (dangerous but sometimes needed)
+        periods = self._extract_loose_dates(text)
+        if periods:
+            return periods
+        
+        # periods = self.date_parser.parse_periods(text)
+        # if not periods:
+        #     start, end = self.date_parser.parse_single_range(text)
+        #     if start and end:
+        #         periods = [(start, end)]
 
-        if not periods:
-            periods = self._extract_loose_dates(text)
+        # if not periods:
+        #     periods = self._extract_loose_dates(text)
 
-        if not periods:
-            today = date.today()
-            periods = [(today, today)]
+        # 4. Default to today
+        today = date.today()
+        return [(today, today)]
 
-        return periods
+        # if not periods:
+        #     today = date.today()
+        #     periods = [(today, today)]
+
+        # return periods
 
     def _extract_loose_dates(self, text: str) -> List[Tuple[date, date]]:
         """Fallback: find every standalone '14 Nov 2025' like token."""

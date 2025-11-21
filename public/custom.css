@@ -197,22 +197,44 @@ footer, .cl__footer, a[href*="chainlit"] {
     display: none !important;
 }
 
-/* 8. PLOTLY CHART CONTAINER - Full Width */
-.js-plotly-plot {
+/* 8. PLOTLY CHART CONTAINER - FORCED WIDTH */
+/* .js-plotly-plot {
     background: white;
     border-radius: var(--radius-card);
-    padding: 1.5rem;
+    padding: 1rem;
     box-shadow: var(--shadow-card);
-    margin: 2rem 0;
-    width: 100% !important;
-    min-height: 550px; /* Increased from 500px */
-}
+    margin: 1.5rem 0; */
+    
+    /* ✅ FORCE WIDTH: This stops the "crushing" */
+    /* width: 100% !important;
+    min-width: 100% !important; */
+    
+    /* Layout safety */
+    /* height: auto !important;
+    display: block !important;
+    overflow: hidden; 
+} */
 
-/* Chart wrapper improvements */
-.plotly-graph-div {
+/* ✅ FORCE INTERNAL LAYERS TO FILL SPACE */
+/* .js-plotly-plot .plotly,
+.js-plotly-plot .plot-container,
+.js-plotly-plot .main-svg {
     width: 100% !important;
-    height: auto !important;
-}
+    min-width: 100% !important;
+    margin: 0 auto !important;
+} */
+
+/* Remove Chainlit's internal constraints */
+/* .cl-plotly {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 100% !important;
+} */
+
+/* Chart wrapper improvements
+.plotly-graph-div {
+    margin: 0 auto;
+} */
 
 /* ✅ NEW: Chainlit Element Wrapper for Charts */
 .cl-element {
