@@ -23,7 +23,7 @@ python-dateutil==2.8.2
 asyncpg>=0.30.0            # Required for Python 3.13
 pandas>=2.2.3              # Required for Python 3.13
 pydantic>=2.9.0            # Required for Python 3.13
-plotly==5.18.0             
+plotly==5.18.0            
 fastapi                    
 uvicorn
 jinja2
