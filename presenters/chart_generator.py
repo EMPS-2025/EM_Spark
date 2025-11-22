@@ -5,16 +5,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import List, Dict, Any, Optional
 
-# ✅ STANDARD CONFIG FOR RESPONSIVENESS
-PLOTLY_CONFIG = {
-    'responsive': True,
-    'displayModeBar': False,
-    'scrollZoom': False,
-}
-
 # Professional Color Palette
 COLORS = {
-    'DAM': '#2563eb',    # Professional Blue
+    'DAM': '#0056D2',    # EM Blue
     'GDAM': '#16a34a',   # Success Green
     'RTM': '#d97706',    # Amber
     'VOL': 'rgba(148, 163, 184, 0.4)', # Slate 400 with opacity
@@ -62,18 +55,16 @@ def generate_market_chart(
         secondary_y=True
     )
 
-    # Layout
+    # Layout - Optimized for Chainlit 2.0 Wide Mode
     fig.update_layout(
         title=dict(
-            text=f"<b>{market_name} Price & Volume</b><br><span style='font-size: 11px; color: #64748b;'>{time_label}</span>",
+            text=f"<b>{market_name} Price & Volume</b><br><span style='font-size: 12px; color: #64748b;'>{time_label}</span>",
             x=0, xanchor='left'
         ),
         template="plotly_white",
         hovermode="x unified",
-        height=450, # Compact professional height
-        autosize=True,
+        # Note: Height/Width are now handled by app.py's update_layout
         margin=dict(l=20, r=20, t=60, b=40),
-        # ✅ LEGEND: Top Right (Inside) - Saves vertical space
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -81,12 +72,13 @@ def generate_market_chart(
             xanchor="right",
             x=1
         ),
-        font=dict(family="Inter, sans-serif", size=11)
+        font=dict(family="Inter, sans-serif", size=11),
+        plot_bgcolor="rgba(0,0,0,0)",  # Transparent
+        paper_bgcolor="rgba(0,0,0,0)"  # Transparent
     )
 
-    # Axis Cleanliness
     fig.update_xaxes(showgrid=False, showline=True, linecolor='#e2e8f0')
-    fig.update_yaxes(title="Vol (MWh)", secondary_y=False, showgrid=False, showline=False, showticklabels=False) # Hide Vol ticks for cleaner look
+    fig.update_yaxes(title="Vol (MWh)", secondary_y=False, showgrid=False, showline=False, showticklabels=False) 
     fig.update_yaxes(title="Price (₹/kWh)", secondary_y=True, showgrid=True, gridcolor='#f1f5f9')
     
     return fig
@@ -118,23 +110,22 @@ def generate_multi_market_chart(
     
     fig.update_layout(
         title=dict(
-            text=f"<b>Market Comparison</b><br><span style='font-size: 11px; color: #64748b;'>{time_label}</span>",
+            text=f"<b>Market Comparison</b><br><span style='font-size: 12px; color: #64748b;'>{time_label}</span>",
             x=0
         ),
         template="plotly_white",
         hovermode="x unified",
-        height=450,
-        autosize=True,
         margin=dict(l=20, r=20, t=60, b=40),
-        # ✅ LEGEND: Top Left (Inside)
         legend=dict(
-            yanchor="top",
-            y=0.98,
-            xanchor="left",
-            x=0.01,
-            bgcolor="rgba(255,255,255,0.8)"
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
         ),
-        font=dict(family="Inter, sans-serif", size=11)
+        font=dict(family="Inter, sans-serif", size=11),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)"
     )
     
     fig.update_xaxes(showgrid=True, gridcolor='#f8fafc', showline=True, linecolor='#e2e8f0')
@@ -168,11 +159,10 @@ def generate_comparison_chart(current_data, previous_data, year):
         title=dict(text=f"<b>Year-over-Year Performance</b>", x=0),
         template="plotly_white",
         barmode='group',
-        height=400,
-        autosize=True,
         margin=dict(l=20, r=20, t=60, b=20),
-        # ✅ LEGEND: Top Right
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)"
     )
     
     return fig
