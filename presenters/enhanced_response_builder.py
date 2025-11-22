@@ -1,5 +1,5 @@
 # presenters/enhanced_response_builder.py
-"""EM-SPARK Response Builder - HTML Format for Figma-like UI"""
+"""EM-SPARK Response Builder - HTML Format for Chainlit 2.0"""
 
 from typing import List, Dict, Any
 
@@ -17,19 +17,17 @@ class EnhancedResponseBuilder:
         return f'<span style="background-color: {bg}; color: {color}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">{icon} {text}</span>'
 
     def build_overview_header(self, market_badge: str, date_label: str, selection_details: Dict[str, Any], user_query: str) -> str:
-        # No indentation in the HTML string to prevent Markdown code block rendering
+        # Use a div wrapper to ensure proper block rendering
         return (
-f'<div style="margin-bottom: 24px;">'
-f'<div style="font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Market Intelligence</div>'
-f'<h1 style="font-size: 1.75rem; font-weight: 700; color: #0f172a; margin: 0;">{market_badge}</h1>'
-f'<div style="display: flex; gap: 16px; margin-top: 12px; font-size: 0.9rem; color: #475569;">'
-f'<span>📅 <strong>{date_label}</strong></span>'
-f'<span>⏰ {selection_details["time_label"]}</span>'
-f'</div>'
-f'</div>'
+            f'<div class="em-header" style="margin-bottom: 24px;">'
+            f'<div style="font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Market Intelligence</div>'
+            f'<h1 style="font-size: 1.75rem; font-weight: 700; color: #0f172a; margin: 0;">{market_badge}</h1>'
+            f'<div style="display: flex; gap: 16px; margin-top: 12px; font-size: 0.9rem; color: #475569;">'
+            f'<span>📅 <strong>{date_label}</strong></span>'
+            f'<span>⏰ {selection_details["time_label"]}</span>'
+            f'</div>'
+            f'</div>'
         )
-
-    # presenters/enhanced_response_builder.py - UPDATE build_snapshot_card METHOD
 
     def build_snapshot_card(
         self, 
@@ -44,7 +42,7 @@ f'</div>'
         total_market_vol: float = 0.0
     ) -> str:
         """
-        Build market snapshot card - showing only Avg Price and Volume (min/max removed).
+        Build market snapshot card - showing only Avg Price and Volume.
         """
         mix_color = "#16a34a" if renewable_mix_pct > 0 else "#64748b"
         mix_bg = "#dcfce7" if renewable_mix_pct > 0 else "#f1f5f9"
@@ -53,59 +51,52 @@ f'</div>'
         share_pct = (total_volume_gwh / total_market_vol * 100) if total_market_vol > 0 else 0
 
         return (
-f'<div style="background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px;">'
-    
-    f'<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px;">'
-        
-        # 1. PRICE BLOCK
-        f'<div style="display: flex; flex-direction: column;">'
-            f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">Market Clearing Price</div>'
-            f'<div style="font-size: 2.25rem; font-weight: 700; color: #0f172a; line-height: 1;">'
-                f'₹{twap:.2f}'
-                f'<span style="font-size: 1rem; color: #64748b; font-weight: 500; margin-left: 4px;">/kWh</span>'
-            f'</div>'
-            f'<div style="margin-top: 8px; display: inline-flex; align-items: center; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; width: fit-content;">'
-                f'📈 System Normal'
-            f'</div>'
-        f'</div>'
+            f'<div class="em-spark-card" style="background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px;">'
+            f'<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px;">'
+                
+                # 1. PRICE BLOCK
+                f'<div style="display: flex; flex-direction: column;">'
+                    f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">Market Clearing Price</div>'
+                    f'<div style="font-size: 2.25rem; font-weight: 700; color: #0f172a; line-height: 1;">'
+                        f'₹{twap:.2f}'
+                        f'<span style="font-size: 1rem; color: #64748b; font-weight: 500; margin-left: 4px;">/kWh</span>'
+                    f'</div>'
+                    f'<div style="margin-top: 8px; display: inline-flex; align-items: center; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; width: fit-content;">'
+                        f'📈 System Normal'
+                    f'</div>'
+                f'</div>'
 
-        # 2. VOLUME BLOCK (SPECIFIC LABEL)
-        f'<div style="display: flex; flex-direction: column; border-left: 1px solid #f1f5f9; padding-left: 24px;">'
-            # ✅ DYNAMIC LABEL: "DAM Volume" instead of "Total Volume"
-            f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">{market} Volume</div>'
-            f'<div style="font-size: 1.75rem; font-weight: 700; color: #0f172a;">'
-                f'{total_volume_gwh:.1f} <span style="font-size: 1rem; color: #64748b;">GWh</span>'
-            f'</div>'
-            # ✅ CONTEXT: Show Market Share
-            f'<div style="font-size: 0.85rem; color: #64748b; margin-top: 4px;">'
-                f'<strong>{share_pct:.1f}%</strong> of Total Market ({total_market_vol:.1f} GWh)'
-            f'</div>'
-        f'</div>'
+                # 2. VOLUME BLOCK (SPECIFIC LABEL)
+                f'<div style="display: flex; flex-direction: column; border-left: 1px solid #f1f5f9; padding-left: 24px;">'
+                    f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">{market} Volume</div>'
+                    f'<div style="font-size: 1.75rem; font-weight: 700; color: #0f172a;">'
+                        f'{total_volume_gwh:.1f} <span style="font-size: 1rem; color: #64748b;">GWh</span>'
+                    f'</div>'
+                    f'<div style="font-size: 0.85rem; color: #64748b; margin-top: 4px;">'
+                        f'<strong>{share_pct:.1f}%</strong> of Total Market ({total_market_vol:.1f} GWh)'
+                    f'</div>'
+                f'</div>'
 
-        # 3. RENEWABLE MIX BLOCK
-        f'<div style="display: flex; flex-direction: column; background: {mix_bg}; border-radius: 12px; padding: 16px; border: 1px solid {mix_color}30;">'
-            f'<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">'
-                f'<span style="font-size: 1rem;">🌿</span>'
-                f'<div style="font-size: 0.75rem; color: {mix_color}; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Renewable Mix</div>'
-            f'</div>'
-            f'<div style="font-size: 1.75rem; font-weight: 700; color: {mix_color};">'
-                f'{renewable_mix_pct:.1f}%'
-            f'</div>'
-            f'<div style="font-size: 0.75rem; color: {mix_color}; opacity: 0.9; font-weight: 500;">Green Market Share(via GDAM Segment)</div>'
-        f'</div>'
+                # 3. RENEWABLE MIX BLOCK
+                f'<div style="display: flex; flex-direction: column; background: {mix_bg}; border-radius: 12px; padding: 16px; border: 1px solid {mix_color}30;">'
+                    f'<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">'
+                        f'<span style="font-size: 1rem;">🌿</span>'
+                        f'<div style="font-size: 0.75rem; color: {mix_color}; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Renewable Mix</div>'
+                    f'</div>'
+                    f'<div style="font-size: 1.75rem; font-weight: 700; color: {mix_color};">'
+                        f'{renewable_mix_pct:.1f}%'
+                    f'</div>'
+                    f'<div style="font-size: 0.75rem; color: {mix_color}; opacity: 0.9; font-weight: 500;">Green Market Share(via GDAM Segment)</div>'
+                f'</div>'
 
-    f'</div>'
-f'</div>'
+            f'</div>'
+            f'</div>'
         )
-
-
-    # presenters/enhanced_response_builder.py - UPDATE build_derivative_section METHOD
 
     def build_derivative_section(self, derivative_rows: List[Dict], actual_trading_date=None, requested_date=None) -> str:
         """
         Build derivative market section with actual trading date display.
         """
-        # Handle case where derivative market didn't exist
         if derivative_rows is None or (isinstance(derivative_rows, list) and len(derivative_rows) == 0 and actual_trading_date is None):
             return (
 f'<div style="background: #fef3c7; border-radius: 12px; padding: 20px; border: 1px solid #fbbf24; margin-bottom: 24px;">'\
@@ -122,7 +113,6 @@ f'</div>'
         if not derivative_rows:
             return ""
         
-        # Build date label
         date_label = ""
         if actual_trading_date and requested_date:
             if actual_trading_date != requested_date:
@@ -170,65 +160,13 @@ f'</table>'\
 f'</div>'
         )
 
-
-#     def build_segment_analysis(self, segments: Dict[str, Any]) -> str:
-#         if not segments:
-#             return ""
-        
-#         rows_html = ""
-#         order = [
-#             ("Peak (18-23)", "peak"),
-#             ("Solar (08-18)", "solar"), 
-#             ("Off-Peak (Rest)", "off_peak")
-#         ]
-        
-#         has_data = False
-#         for label, key in order:
-#             data = segments.get(key)
-#             if data and data.get('count', 0) > 0:
-#                 has_data = True
-#                 price = data['twap']
-#                 vol = data['volume_gwh']
-#                 rows_html += (
-# f'<tr style="border-bottom: 1px solid #f1f5f9;">'
-# f'<td style="padding: 12px 16px; font-weight: 600; color: #0f172a;">{label}</td>'
-# f'<td style="padding: 12px 16px; text-align: right;">₹{price:.4f}</td>'
-# f'<td style="padding: 12px 16px; text-align: right;">{vol:.2f}</td>'
-# f'</tr>'
-#                 )
-        
-#         if not has_data:
-#             return ""
-            
-#         return (
-# f'<div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">'
-# f'<div style="padding: 16px; border-bottom: 1px solid #e2e8f0;">'
-# f'<h3 style="margin: 0; font-size: 1rem; color: #0f172a;">🕒 Segment Analysis</h3>'
-# f'</div>'
-# f'<table style="width: 100%; border-collapse: collapse;">'
-# f'<thead style="background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase;">'
-# f'<tr>'
-# f'<th style="padding: 10px 16px; text-align: left;">Segment</th>'
-# f'<th style="padding: 10px 16px; text-align: right;">Price (₹/kWh)</th>'
-# f'<th style="padding: 10px 16px; text-align: right;">Volume (GWh)</th>'
-# f'</tr>'
-# f'</thead>'
-# f'<tbody>'
-# f'{rows_html}'
-# f'</tbody>'
-# f'</table>'
-# f'</div>'
-#         )
-
-    # presenters/enhanced_response_builder.py - UPDATE build_market_comparison_section METHOD
-
     def build_market_comparison_section(
         self, 
         spec_year: int, 
         current_year_data: Dict[str, Dict[str, Any]], 
         previous_year_data: Dict[str, Any],
-        current_date_range: str = None,  # NEW PARAMETER
-        current_time_window: str = None   # NEW PARAMETER
+        current_date_range: str = None,
+        current_time_window: str = None
     ) -> str:
         """
         Build market comparison with detailed date and time information.
@@ -236,10 +174,8 @@ f'</div>'
         prev_year = spec_year - 1
         rows_html = ""
         
-        # Build descriptive comparison label
         comparison_label = f"{spec_year} vs {prev_year}"
         if current_date_range and current_time_window:
-            comparison_label = f"{current_date_range} • {current_time_window}"
             comparison_subtitle = f"Comparing {spec_year} vs {prev_year} (Same Period)"
         elif current_date_range:
             comparison_subtitle = f"{current_date_range} • {spec_year} vs {prev_year}"
@@ -261,7 +197,6 @@ f'</div>'
             market_color = "#0056D2" if market == "DAM" else ("#10b981" if market == "GDAM" else "#f59e0b")
             market_badge = f'<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:{market_color}; margin-right:8px;"></span>{market}'
             
-            # Show prev year label dynamically
             prev_label = f"{prev_year}" if current_date_range else "prev"
             
             rows_html += (
@@ -301,21 +236,20 @@ f'</table>'\
 f'</div>'
     )
 
-
     def build_ai_insights_section(self, insights: List[str]) -> str:
         if not insights: return ""
         
         lis = "".join([f'<li style="margin-bottom: 8px; position: relative; padding-left: 20px;"><span style="position: absolute; left: 0; color: #00BCE4;">•</span> {i}</li>' for i in insights])
         
         return (
-f'<div style="background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); border-radius: 12px; padding: 20px; border: 1px solid #dbeafe;">'
-f'<h3 style="margin: 0 0 12px 0; color: #1e40af; font-size: 1rem; display: flex; align-items: center; gap: 8px;">'
-f'🤖 AI Insights'
-f'</h3>'
-f'<ul style="margin: 0; padding: 0; list-style: none; font-size: 0.95rem; color: #334155;">'
-f'{lis}'
-f'</ul>'
-f'</div>'
+            f'<div style="background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%); border-radius: 12px; padding: 20px; border: 1px solid #dbeafe;">'
+            f'<h3 style="margin: 0 0 12px 0; color: #1e40af; font-size: 1rem; display: flex; align-items: center; gap: 8px;">'
+            f'🤖 AI Insights'
+            f'</h3>'
+            f'<ul style="margin: 0; padding: 0; list-style: none; font-size: 0.95rem; color: #334155;">'
+            f'{lis}'
+            f'</ul>'
+            f'</div>'
         )
 
     def compose_dashboard(self, sections: List[str]) -> str:
