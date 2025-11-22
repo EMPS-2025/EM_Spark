@@ -23,6 +23,8 @@
   --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
+a[href*="chainlit.io"] { display: none !important; }
+
 /* 1. GLOBAL RESET & TYPOGRAPHY */
 html, body, #root {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -121,6 +123,49 @@ main {
   font-weight: 600;
   color: var(--em-blue-dark);
 }
+
+/* 2. CARD STYLING (Restored for your HTML Cards) */
+.em-header {
+  margin-bottom: 1.5rem;
+}
+
+.em-spark-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  margin-bottom: 1.5rem;
+}
+
+/* Ensure the grid inside the card behaves responsively */
+.em-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
+}
+
+/* 3. MARKDOWN OVERRIDES (For standard text) */
+.markdown h1 { font-size: 1.5rem; font-weight: 700; color: #0f172a; }
+.markdown h2 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 1.5rem; }
+
+/* Tables */
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+.markdown th { background: #f8fafc; padding: 12px; text-align: left; color: #64748b; font-size: 0.75rem; text-transform: uppercase; }
+.markdown td { padding: 12px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+
+/* Lists (AI Insights) */
+.markdown ul { list-style: none; padding: 0; }
+.markdown li { position: relative; padding-left: 1.2rem; margin-bottom: 0.5rem; }
+.markdown li::before { content: "•"; color: #00BCE4; font-weight: bold; position: absolute; left: 0; }
 
 /* 5. AI INSIGHTS BOX */
 .markdown h2:contains("AI-Powered Insights") + ul {
