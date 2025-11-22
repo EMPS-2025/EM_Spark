@@ -29,6 +29,33 @@ db = DatabaseManager(config)
 parser = BulletproofParser(config)
 response_builder = EnhancedResponseBuilder()
 
+# ═══════════════════════════════════════════════════════════════
+# 🚀 STARTERS (Quick Actions)
+# ═══════════════════════════════════════════════════════════════
+@cl.set_starters
+async def set_starters():
+    return [
+        cl.Starter(
+            label="DAM rate today",
+            message="DAM rate for today",
+            icon="/public/avatars/emps_v2.png",
+        ),
+        cl.Starter(
+            label="GDAM yesterday",
+            message="GDAM rate for yesterday",
+            icon="/public/avatars/emps_v2.png",
+        ),
+        cl.Starter(
+            label="Compare Markets",
+            message="Compare DAM and GDAM for today",
+            icon="/public/avatars/emps_v2.png",
+        ),
+        cl.Starter(
+            label="RTM Last Hour",
+            message="RTM rate for last hour",
+            icon="/public/avatars/emps_v2.png",
+        )
+    ]
 
 @cl.on_chat_start
 async def start_session():
@@ -44,6 +71,10 @@ async def start_session():
 Ready to analyze! 📊
     """
     await cl.Message(author=config.ASSISTANT_NAME, content=welcome).send()
+
+# ═══════════════════════════════════════════════════════════════
+# 🧠 CORE LOGIC
+# ═══════════════════════════════════════════════════════════════
 
 def describe_time_selection(spec, total_specs=1) -> Dict[str, Any]:
     """Generate human-readable time labels."""
@@ -188,6 +219,9 @@ async def fetch_aggregated_market_data(specs: List[Any], market_override: str = 
         
     return compute_aggregated_metrics(all_rows, granularity)
 
+# ═══════════════════════════════════════════════════════════════
+# 💬 MESSAGE HANDLER
+# ═══════════════════════════════════════════════════════════════
 
 @cl.on_message
 async def handle_message(msg: cl.Message):
@@ -197,10 +231,9 @@ async def handle_message(msg: cl.Message):
     try:
         user_query = msg.content.strip()
         
-        # Check if user clicked "Generate Charts" button
+        # Check if user clicked "Generate Charts" button (legacy check, mostly handled by action callback now)
         if user_query.lower() in ["generate charts", "show charts", "display charts"]:
             await progress_msg.update(content="📊 Generating charts...")
-            # Retrieve stored chart data from session
             chart_elements = cl.user_session.get("pending_charts", [])
             if chart_elements:
                 await cl.Message(
@@ -224,7 +257,7 @@ async def handle_message(msg: cl.Message):
         primary_market = specs[0].market
         selection_details = describe_time_selection(specs[0], total_specs=len(specs))
 
-        # ✅ NEW: Build exclusion label
+        # Build exclusion label
         exclusion_label = ""
         if specs[0].exclusion:
             excluded_days = specs[0].exclusion.get_excluded_day_names()
@@ -261,7 +294,7 @@ async def handle_message(msg: cl.Message):
         vol_dam = all_market_data.get('DAM', {}).get('total_volume_gwh', 0)
         vol_gdam = all_market_data.get('GDAM', {}).get('total_volume_gwh', 0)
         vol_rtm = all_market_data.get('RTM', {}).get('total_volume_gwh', 0)
-        # 1. Renewable Mix (GDAM / Spot)
+        
         total_market_vol = vol_dam + vol_gdam + vol_rtm
         
         renewable_mix_pct = 0.0
@@ -291,7 +324,7 @@ async def handle_message(msg: cl.Message):
         # Generate Charts
         chart_elements = []
         
-        # 1. Multi-market comparison chart (if multiple markets have data)
+        # 1. Multi-market comparison chart
         active_markets = {k: v for k, v in all_market_rows.items() if v}
         if len(active_markets) > 1:
             multi_fig = generate_multi_market_chart(
@@ -313,17 +346,12 @@ async def handle_message(msg: cl.Message):
                 specs[0].granularity == 'quarter'
             )
             if single_fig:
-                single_fig.update_layout(
-                    width=None,  # Let it be responsive
-                    autosize=True,
-                    margin=dict(l=60, r=60, t=80, b=60)
-                )
+                # We don't set layout here anymore, handled in callback for better sizing
                 chart_elements.append(
                     cl.Plotly(
                         name=f"{primary_market}_chart", 
                         figure=single_fig, 
-                        display="inline",
-                        size="large"
+                        display="inline"
                     )
                 )
         
@@ -335,7 +363,7 @@ async def handle_message(msg: cl.Message):
                     cl.Plotly(name="Year-over-Year Comparison", figure=yoy_fig, display="inline")
                 )
         
-        # Build date label for comparison section
+        # Build date label
         if len(specs) > 1:
             date_label = f"{len(specs)} Periods"
             date_range_label = f"{specs[0].start_date} to {specs[-1].end_date}"
@@ -383,7 +411,7 @@ async def handle_message(msg: cl.Message):
         
         response_text = response_builder.compose_dashboard(sections)
 
-        # UPDATED FOR CHAINLIT 2.0: 'value' removed, 'description' -> 'tooltip'
+        # UPDATED FOR CHAINLIT 2.0: Actions
         actions = [
             cl.Action(
                 name="generate_charts",
@@ -404,11 +432,15 @@ async def handle_message(msg: cl.Message):
     except Exception as e:
         traceback.print_exc()
         await progress_msg.remove()
-        await cl.Message(author=config.ASSISTANT_NAME, content=f"❌ Error: {str(e)}").send()
+        await cl.Message(author=config.ASSISTANT_NAME,content=f"❌ Error: {str(e)}").send()
+
+# ═══════════════════════════════════════════════════════════════
+# 📊 ACTION CALLBACKS
+# ═══════════════════════════════════════════════════════════════
 
 @cl.action_callback("generate_charts")
 async def on_generate_charts(action: cl.Action):
-    """Display charts - simple version that works"""
+    """Display charts - optimized for Chainlit 2.0"""
     charts = cl.user_session.get("pending_charts", [])
     
     if not charts:
@@ -418,21 +450,26 @@ async def on_generate_charts(action: cl.Action):
     # Send title
     await cl.Message(author=config.ASSISTANT_NAME, content="## 📊 Market Visualization\n\n").send()
     
-    # Send each chart in its own message
+    # Send each chart in its own message with proper sizing
     for i, chart_elem in enumerate(charts):
         fig = chart_elem.figure
-        # Set explicit width
+        
+        # Update layout for wide display
         fig.update_layout(
             width=1000,
             height=500,
             autosize=False,
-            margin=dict(l=50, r=50, t=80, b=50)
+            margin=dict(l=50, r=50, t=80, b=50),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)"
         )
+        
         new_chart = cl.Plotly(
             name=f"chart_{i}",
             figure=fig,
             display="inline"
         )
+        
         msg = cl.Message(author=config.ASSISTANT_NAME, content="")
         msg.elements = [new_chart]
         await msg.send()
