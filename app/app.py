@@ -43,7 +43,7 @@ async def start_session():
 
 Ready to analyze! 📊
     """
-    await cl.Message(author=config.ASSISTANT_NAME,content=welcome).send()
+    await cl.Message(author=config.ASSISTANT_NAME, content=welcome).send()
 
 def describe_time_selection(spec, total_specs=1) -> Dict[str, Any]:
     """Generate human-readable time labels."""
@@ -197,7 +197,6 @@ async def handle_message(msg: cl.Message):
     try:
         user_query = msg.content.strip()
         
-
         # Check if user clicked "Generate Charts" button
         if user_query.lower() in ["generate charts", "show charts", "display charts"]:
             await progress_msg.update(content="📊 Generating charts...")
@@ -258,11 +257,7 @@ async def handle_message(msg: cl.Message):
 
         primary_data = all_market_data.get(primary_market, {})
 
-        # ═══════════════════════════════════════════════════════════════
         # 🌿 CALCULATE RENEWABLE MIX
-        # Formula: GDAM Volume / (DAM Volume + GDAM Volume)
-        # ═══════════════════════════════════════════════════════════════
-        
         vol_dam = all_market_data.get('DAM', {}).get('total_volume_gwh', 0)
         vol_gdam = all_market_data.get('GDAM', {}).get('total_volume_gwh', 0)
         vol_rtm = all_market_data.get('RTM', {}).get('total_volume_gwh', 0)
@@ -273,13 +268,10 @@ async def handle_message(msg: cl.Message):
         if total_market_vol > 0:
             renewable_mix_pct = (vol_gdam / total_market_vol) * 100
 
-        # 2. Total Market Volume (DAM + GDAM + RTM) - NEW!
-        
         # Calculate segments
         segments = calculate_segments(primary_data.get('rows', []))
         
         # Fetch derivatives
-        # Fetch derivatives with actual trading date
         deriv_data, deriv_actual_date = db.fetch_derivative_data(specs[0].start_date)
         
         # Generate AI Insights
@@ -320,7 +312,6 @@ async def handle_message(msg: cl.Message):
                 primary_data['rows'],
                 specs[0].granularity == 'quarter'
             )
-            # When creating each chart, add config
             if single_fig:
                 single_fig.update_layout(
                     width=None,  # Let it be responsive
@@ -332,7 +323,7 @@ async def handle_message(msg: cl.Message):
                         name=f"{primary_market}_chart", 
                         figure=single_fig, 
                         display="inline",
-                        size="large"  # ✅ Try this
+                        size="large"
                     )
                 )
         
@@ -343,10 +334,6 @@ async def handle_message(msg: cl.Message):
                 chart_elements.append(
                     cl.Plotly(name="Year-over-Year Comparison", figure=yoy_fig, display="inline")
                 )
-        
-        
-
-        
         
         # Build date label for comparison section
         if len(specs) > 1:
@@ -396,14 +383,13 @@ async def handle_message(msg: cl.Message):
         
         response_text = response_builder.compose_dashboard(sections)
 
-        # Add button for chart generation
+        # UPDATED FOR CHAINLIT 2.0: 'value' removed, 'description' -> 'tooltip'
         actions = [
             cl.Action(
                 name="generate_charts",
-                value="generate_charts",
                 payload={"action": "show_charts"},
                 label="📊 Generate Charts",
-                description="Click to display interactive market charts"
+                tooltip="Click to display interactive market charts"
             )
         ]
         cl.user_session.set("pending_charts", chart_elements)
@@ -418,14 +404,7 @@ async def handle_message(msg: cl.Message):
     except Exception as e:
         traceback.print_exc()
         await progress_msg.remove()
-        await cl.Message(author=config.ASSISTANT_NAME,content=f"❌ Error: {str(e)}").send()
-
-# Add action callback handler
-# ════════════════════════════════════════════════════════════════════════
-# ✅ REPLACE YOUR OLD on_generate_charts WITH THIS
-# ════════════════════════════════════════════════════════════════════════
-
-# app/app.py - SIMPLE WORKING VERSION
+        await cl.Message(author=config.ASSISTANT_NAME, content=f"❌ Error: {str(e)}").send()
 
 @cl.action_callback("generate_charts")
 async def on_generate_charts(action: cl.Action):
@@ -439,31 +418,24 @@ async def on_generate_charts(action: cl.Action):
     # Send title
     await cl.Message(author=config.ASSISTANT_NAME, content="## 📊 Market Visualization\n\n").send()
     
-    # ✅ CRITICAL FIX: Send each chart in its own message
+    # Send each chart in its own message
     for i, chart_elem in enumerate(charts):
-        # Get the figure and force specific width
         fig = chart_elem.figure
-        
-        # Set explicit width (not None, not 1400, but optimal for display)
+        # Set explicit width
         fig.update_layout(
-            width=1000,  # Fixed width that Chainlit can handle
+            width=1000,
             height=500,
-            autosize=False,  # Disable autosize
+            autosize=False,
             margin=dict(l=50, r=50, t=80, b=50)
         )
-        
-        # Create new Plotly element with fixed size
         new_chart = cl.Plotly(
             name=f"chart_{i}",
             figure=fig,
             display="inline"
         )
-        
-        # Send in separate message
-        msg = cl.Message(author=config.ASSISTANT_NAME,content="")
+        msg = cl.Message(author=config.ASSISTANT_NAME, content="")
         msg.elements = [new_chart]
         await msg.send()
     
     # Clear charts
     cl.user_session.set("pending_charts", [])
-
