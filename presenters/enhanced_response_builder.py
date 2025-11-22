@@ -1,5 +1,5 @@
 # presenters/enhanced_response_builder.py
-"""EM-SPARK Response Builder - HTML Format for Chainlit 2.0"""
+"""EM-SPARK Response Builder - Minified HTML for Chainlit 2.0"""
 
 from typing import List, Dict, Any
 
@@ -14,20 +14,12 @@ class EnhancedResponseBuilder:
         icon = "▲" if value > 0 else "▼"
         text = f"{abs(value):.1f}%"
         
+        # Flattened string
         return f'<span style="background-color: {bg}; color: {color}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">{icon} {text}</span>'
 
     def build_overview_header(self, market_badge: str, date_label: str, selection_details: Dict[str, Any], user_query: str) -> str:
-        # Use a div wrapper to ensure proper block rendering
-        return (
-            f'<div class="em-header" style="margin-bottom: 24px;">'
-            f'<div style="font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Market Intelligence</div>'
-            f'<h1 style="font-size: 1.75rem; font-weight: 700; color: #0f172a; margin: 0;">{market_badge}</h1>'
-            f'<div style="display: flex; gap: 16px; margin-top: 12px; font-size: 0.9rem; color: #475569;">'
-            f'<span>📅 <strong>{date_label}</strong></span>'
-            f'<span>⏰ {selection_details["time_label"]}</span>'
-            f'</div>'
-            f'</div>'
-        )
+        # Flattened string
+        return f'<div class="em-header" style="margin-bottom: 24px;"><div style="font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">Market Intelligence</div><h1 style="font-size: 1.75rem; font-weight: 700; color: #0f172a; margin: 0;">{market_badge}</h1><div style="display: flex; gap: 16px; margin-top: 12px; font-size: 0.9rem; color: #475569;"><span>📅 <strong>{date_label}</strong></span><span>⏰ {selection_details["time_label"]}</span></div></div>'
 
     def build_snapshot_card(
         self, 
@@ -35,79 +27,31 @@ class EnhancedResponseBuilder:
         delivery_label: str, 
         time_window: str, 
         twap: float, 
-        min_price: float,  # Keep parameter for backwards compatibility
-        max_price: float,  # Keep parameter for backwards compatibility
+        min_price: float,
+        max_price: float,
         total_volume_gwh: float,
         renewable_mix_pct: float = 0.0,
         total_market_vol: float = 0.0
     ) -> str:
-        """
-        Build market snapshot card - showing only Avg Price and Volume.
-        """
         mix_color = "#16a34a" if renewable_mix_pct > 0 else "#64748b"
         mix_bg = "#dcfce7" if renewable_mix_pct > 0 else "#f1f5f9"
-
-        # Market Share Calc
         share_pct = (total_volume_gwh / total_market_vol * 100) if total_market_vol > 0 else 0
 
+        # Flattened string
         return (
             f'<div class="em-spark-card" style="background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; margin-bottom: 24px;">'
             f'<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 24px;">'
-                
-                # 1. PRICE BLOCK
-                f'<div style="display: flex; flex-direction: column;">'
-                    f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">Market Clearing Price</div>'
-                    f'<div style="font-size: 2.25rem; font-weight: 700; color: #0f172a; line-height: 1;">'
-                        f'₹{twap:.2f}'
-                        f'<span style="font-size: 1rem; color: #64748b; font-weight: 500; margin-left: 4px;">/kWh</span>'
-                    f'</div>'
-                    f'<div style="margin-top: 8px; display: inline-flex; align-items: center; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; width: fit-content;">'
-                        f'📈 System Normal'
-                    f'</div>'
-                f'</div>'
-
-                # 2. VOLUME BLOCK (SPECIFIC LABEL)
-                f'<div style="display: flex; flex-direction: column; border-left: 1px solid #f1f5f9; padding-left: 24px;">'
-                    f'<div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">{market} Volume</div>'
-                    f'<div style="font-size: 1.75rem; font-weight: 700; color: #0f172a;">'
-                        f'{total_volume_gwh:.1f} <span style="font-size: 1rem; color: #64748b;">GWh</span>'
-                    f'</div>'
-                    f'<div style="font-size: 0.85rem; color: #64748b; margin-top: 4px;">'
-                        f'<strong>{share_pct:.1f}%</strong> of Total Market ({total_market_vol:.1f} GWh)'
-                    f'</div>'
-                f'</div>'
-
-                # 3. RENEWABLE MIX BLOCK
-                f'<div style="display: flex; flex-direction: column; background: {mix_bg}; border-radius: 12px; padding: 16px; border: 1px solid {mix_color}30;">'
-                    f'<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">'
-                        f'<span style="font-size: 1rem;">🌿</span>'
-                        f'<div style="font-size: 0.75rem; color: {mix_color}; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Renewable Mix</div>'
-                    f'</div>'
-                    f'<div style="font-size: 1.75rem; font-weight: 700; color: {mix_color};">'
-                        f'{renewable_mix_pct:.1f}%'
-                    f'</div>'
-                    f'<div style="font-size: 0.75rem; color: {mix_color}; opacity: 0.9; font-weight: 500;">Green Market Share(via GDAM Segment)</div>'
-                f'</div>'
-
-            f'</div>'
-            f'</div>'
+            f'<div style="display: flex; flex-direction: column;"><div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">Market Clearing Price</div><div style="font-size: 2.25rem; font-weight: 700; color: #0f172a; line-height: 1;">₹{twap:.2f}<span style="font-size: 1rem; color: #64748b; font-weight: 500; margin-left: 4px;">/kWh</span></div><div style="margin-top: 8px; display: inline-flex; align-items: center; background: #eff6ff; color: #1d4ed8; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; width: fit-content;">📈 System Normal</div></div>'
+            f'<div style="display: flex; flex-direction: column; border-left: 1px solid #f1f5f9; padding-left: 24px;"><div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px;">{market} Volume</div><div style="font-size: 1.75rem; font-weight: 700; color: #0f172a;">{total_volume_gwh:.1f} <span style="font-size: 1rem; color: #64748b;">GWh</span></div><div style="font-size: 0.85rem; color: #64748b; margin-top: 4px;"><strong>{share_pct:.1f}%</strong> of Total ({total_market_vol:.1f} GWh)</div></div>'
+            f'<div style="display: flex; flex-direction: column; background: {mix_bg}; border-radius: 12px; padding: 16px; border: 1px solid {mix_color}30;"><div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;"><span style="font-size: 1rem;">🌿</span><div style="font-size: 0.75rem; color: {mix_color}; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Renewable Mix</div></div><div style="font-size: 1.75rem; font-weight: 700; color: {mix_color};">{renewable_mix_pct:.1f}%</div><div style="font-size: 0.75rem; color: {mix_color}; opacity: 0.9; font-weight: 500;">Green Market Share</div></div>'
+            f'</div></div>'
         )
 
     def build_derivative_section(self, derivative_rows: List[Dict], actual_trading_date=None, requested_date=None) -> str:
-        """
-        Build derivative market section with actual trading date display.
-        """
         if derivative_rows is None or (isinstance(derivative_rows, list) and len(derivative_rows) == 0 and actual_trading_date is None):
             return (
-f'<div style="background: #fef3c7; border-radius: 12px; padding: 20px; border: 1px solid #fbbf24; margin-bottom: 24px;">'\
-f'<div style="display: flex; align-items: center; gap: 12px;">'\
-f'<div style="font-size: 1.5rem;">ℹ️</div>'\
-f'<div>'\
-f'<div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">Derivative Market Not Available</div>'\
-f'<div style="font-size: 0.875rem; color: #78350f;">The electricity derivative market (futures) started operations from <strong>July 2025</strong> onwards.</div>'\
-f'</div>'\
-f'</div>'\
-f'</div>'
+                f'<div style="background: #fef3c7; border-radius: 12px; padding: 20px; border: 1px solid #fbbf24; margin-bottom: 24px;">'
+                f'<div style="display: flex; align-items: center; gap: 12px;"><div style="font-size: 1.5rem;">ℹ️</div><div><div style="font-weight: 600; color: #92400e; margin-bottom: 4px;">Derivative Market Not Available</div><div style="font-size: 0.875rem; color: #78350f;">The electricity derivative market (futures) started operations from <strong>July 2025</strong> onwards.</div></div></div></div>'
             )
         
         if not derivative_rows:
@@ -130,34 +74,14 @@ f'</div>'
             if hasattr(month, 'strftime'):
                 month = month.strftime('%b %Y')
             
-            rows_html += (
-f'<tr style="border-bottom: 1px solid #f1f5f9;">'\
-f'<td style="padding: 12px 16px; font-weight: 600;">{exchange}</td>'\
-f'<td style="padding: 12px 16px;">{row.get("commodity", "N/A")}</td>'\
-f'<td style="padding: 12px 16px;">{month}</td>'\
-f'<td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600;">₹{price_kwh:.2f}</td>'\
-f'</tr>'
-            )
+            rows_html += f'<tr style="border-bottom: 1px solid #f1f5f9;"><td style="padding: 12px 16px; font-weight: 600;">{exchange}</td><td style="padding: 12px 16px;">{row.get("commodity", "N/A")}</td><td style="padding: 12px 16px;">{month}</td><td style="padding: 12px 16px; text-align: right; font-family: monospace; font-weight: 600;">₹{price_kwh:.2f}</td></tr>'
         
         return (
-f'<div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">'\
-f'<div style="background: linear-gradient(to right, #0056D2, #0041a3); color: white; padding: 12px 16px; font-weight: 600; font-size: 0.95rem;">'\
-f'💹 Derivative Market (Futures){date_label}'\
-f'</div>'\
-f'<table style="width: 100%; border-collapse: collapse;">'\
-f'<thead style="background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase;">'\
-f'<tr>'\
-f'<th style="padding: 10px 16px; text-align: left;">Exchange</th>'\
-f'<th style="padding: 10px 16px; text-align: left;">Commodity</th>'\
-f'<th style="padding: 10px 16px; text-align: left;">Month</th>'\
-f'<th style="padding: 10px 16px; text-align: right;">Close Price</th>'\
-f'</tr>'\
-f'</thead>'\
-f'<tbody>'\
-f'{rows_html}'\
-f'</tbody>'\
-f'</table>'\
-f'</div>'
+            f'<div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">'
+            f'<div style="background: linear-gradient(to right, #0056D2, #0041a3); color: white; padding: 12px 16px; font-weight: 600; font-size: 0.95rem;">💹 Derivative Market (Futures){date_label}</div>'
+            f'<table style="width: 100%; border-collapse: collapse;">'
+            f'<thead style="background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase;"><tr><th style="padding: 10px 16px; text-align: left;">Exchange</th><th style="padding: 10px 16px; text-align: left;">Commodity</th><th style="padding: 10px 16px; text-align: left;">Month</th><th style="padding: 10px 16px; text-align: right;">Close Price</th></tr></thead>'
+            f'<tbody>{rows_html}</tbody></table></div>'
         )
 
     def build_market_comparison_section(
@@ -200,41 +124,24 @@ f'</div>'
             prev_label = f"{prev_year}" if current_date_range else "prev"
             
             rows_html += (
-f'<tr style="border-bottom: 1px solid #f1f5f9;">'\
-f'<td style="padding: 16px; font-weight: 600;">{market_badge}</td>'\
-f'<td style="padding: 16px; text-align: right;">'\
-f'<div style="font-weight: 500;">{v_curr:,.1f} GWh</div>'\
-f'<div style="font-size: 0.75rem; color: #94a3b8;">{v_prev:,.1f} ({prev_label})</div>'\
-f'</td>'\
-f'<td style="padding: 16px; text-align: right;">'\
-f'<div style="font-weight: 600; color: #0f172a;">₹{p_curr:.3f}</div>'\
-f'<div style="font-size: 0.75rem; color: #94a3b8;">₹{p_prev:.3f} ({prev_label})</div>'\
-f'</td>'\
-f'<td style="padding: 16px; text-align: right;">{yoy_chip}</td>'\
-f'</tr>'
-        )
+                f'<tr style="border-bottom: 1px solid #f1f5f9;">'
+                f'<td style="padding: 16px; font-weight: 600;">{market_badge}</td>'
+                f'<td style="padding: 16px; text-align: right;"><div style="font-weight: 500;">{v_curr:,.1f} GWh</div><div style="font-size: 0.75rem; color: #94a3b8;">{v_prev:,.1f} ({prev_label})</div></td>'
+                f'<td style="padding: 16px; text-align: right;"><div style="font-weight: 600; color: #0f172a;">₹{p_curr:.3f}</div><div style="font-size: 0.75rem; color: #94a3b8;">₹{p_prev:.3f} ({prev_label})</div></td>'
+                f'<td style="padding: 16px; text-align: right;">{yoy_chip}</td>'
+                f'</tr>'
+            )
     
         return (
-f'<div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">'\
-f'<div style="padding: 16px; border-bottom: 1px solid #e2e8f0;">'\
-f'<h3 style="margin: 0; font-size: 1rem; color: #0f172a;">📊 Market Comparison</h3>'\
-f'<div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">{comparison_subtitle}</div>'\
-f'</div>'\
-f'<table style="width: 100%; border-collapse: collapse;">'\
-f'<thead style="background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase;">'\
-f'<tr>'\
-f'<th style="padding: 10px 16px; text-align: left;">Market</th>'\
-f'<th style="padding: 10px 16px; text-align: right;">Volume</th>'\
-f'<th style="padding: 10px 16px; text-align: right;">Price</th>'\
-f'<th style="padding: 10px 16px; text-align: right;">YoY Δ</th>'\
-f'</tr>'\
-f'</thead>'\
-f'<tbody>'\
-f'{rows_html}'\
-f'</tbody>'\
-f'</table>'\
-f'</div>'
-    )
+            f'<div style="background: white; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">'
+            f'<div style="padding: 16px; border-bottom: 1px solid #e2e8f0;">'
+            f'<h3 style="margin: 0; font-size: 1rem; color: #0f172a;">📊 Market Comparison</h3>'
+            f'<div style="font-size: 0.8rem; color: #64748b; margin-top: 2px;">{comparison_subtitle}</div>'
+            f'</div>'
+            f'<table style="width: 100%; border-collapse: collapse;">'
+            f'<thead style="background: #f8fafc; color: #64748b; font-size: 0.75rem; text-transform: uppercase;"><tr><th style="padding: 10px 16px; text-align: left;">Market</th><th style="padding: 10px 16px; text-align: right;">Volume</th><th style="padding: 10px 16px; text-align: right;">Price</th><th style="padding: 10px 16px; text-align: right;">YoY Δ</th></tr></thead>'
+            f'<tbody>{rows_html}</tbody></table></div>'
+        )
 
     def build_ai_insights_section(self, insights: List[str]) -> str:
         if not insights: return ""
@@ -253,4 +160,4 @@ f'</div>'
         )
 
     def compose_dashboard(self, sections: List[str]) -> str:
-        return "\n\n".join([s for s in sections if s and len(s.strip()) > 0])
+        return "".join([s for s in sections if s and len(s.strip()) > 0])
