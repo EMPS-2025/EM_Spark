@@ -2,7 +2,8 @@
 # =======================================
 
 # Core Framework
-chainlit==1.1.402
+# UPDATED: Unpinned to get latest (2.0+) for Python 3.13 support
+chainlit
 
 # Database
 psycopg2-binary==2.9.9
@@ -19,13 +20,12 @@ dateparser==1.2.0
 python-dateutil==2.8.2
 
 # Optional: Enhanced Features
-asyncpg>=0.30.0           # For async database operations
-pandas>=2.2.3             # For data analysis
-plotly==5.18.0            # For charts and visualizations
-fastapi
+asyncpg>=0.30.0            # Required for Python 3.13
+pandas>=2.2.3              # Required for Python 3.13
+pydantic>=2.9.0            # Required for Python 3.13
+plotly==5.18.0             
+fastapi                    
 uvicorn
 jinja2
 aiofiles
 asyncio
-
-pydantic>=2.9.0
